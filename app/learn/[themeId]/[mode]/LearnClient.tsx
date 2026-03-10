@@ -47,8 +47,6 @@ export default function LearnClient({ themeId, mode }: { themeId: string; mode: 
           qs.forEach(q => textsToFetch.push(q.ttsText || q.word));
         } else if (learningMode === 'kiku') {
           qs.forEach(q => textsToFetch.push(`${q.ttsText || q.word}は どれかな？`));
-        } else if (learningMode === 'erabu') {
-          qs.forEach(q => textsToFetch.push(`${q.ttsText || q.word}は どれ？`));
         } else if (learningMode === 'nakamawake' && theme) {
           textsToFetch.push(`${theme.name}は どれ？`);
         }

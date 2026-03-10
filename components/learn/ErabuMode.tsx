@@ -1,11 +1,9 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { VocabularyItem } from '../../types/vocabulary';
 import { SessionAnswer } from '../../types/learning';
 import { generateDistractors } from '../../lib/learning-engine';
 import FeedbackOverlay from '../FeedbackOverlay';
-import { speakText } from '../../lib/tts';
-import { useApp } from '../../contexts/AppContext';
 
 interface ErabuModeProps {
   questions: VocabularyItem[];
@@ -24,19 +22,11 @@ function makeQuiz(target: VocabularyItem): QuizState {
 }
 
 export default function ErabuMode({ questions, onComplete }: ErabuModeProps) {
-  const { settings } = useApp();
   const [index, setIndex] = useState(0);
   const [quiz, setQuiz] = useState<QuizState>(() => makeQuiz(questions[0]));
   const [answers, setAnswers] = useState<SessionAnswer[]>([]);
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null);
   const [questionStartTime, setQuestionStartTime] = useState(Date.now());
-
-  // 音声再生
-  useEffect(() => {
-    if (settings.voiceEnabled && quiz.target) {
-      speakText(`${quiz.target.ttsText || quiz.target.word}は どれ？`, settings.apiKey || null, settings.voiceName, settings.voiceSpeed, true).catch(() => {});
-    }
-  }, [index, quiz.target, settings]);
 
   const handleSelect = useCallback((selected: VocabularyItem) => {
     if (feedback) return;
