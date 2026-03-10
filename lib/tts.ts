@@ -163,9 +163,10 @@ function playBrowserTTS(text: string, speed: number): Promise<void> {
 
 /**
  * 音声を再生する
- * @param instant trueの場合、ブラウザTTSで即座に読み上げ（自動再生用）。
- *               裏でGemini音声をキャッシュに先読みする。
- *               falseの場合、キャッシュにあればGemini、なければブラウザTTS（ボタンタップ用）。
+ * @param instant trueの場合、Gemini高品質音声を優先（最大3秒待機）。
+ *               キャッシュがあれば即座に再生、なければGemini取得を試み、
+ *               タイムアウト時のみブラウザTTSにフォールバック。
+ *               falseの場合、Gemini取得を試みる（ボタンタップ用）。
  */
 export async function speakText(
   text: string,
@@ -177,19 +178,48 @@ export async function speakText(
   stopSpeaking();
 
   if (instant) {
-    // キャッシュにGemini高品質音声があれば即座にそれを使う
     if (apiKey) {
       const cacheKey = `${voiceName}:${text}`;
+      // キャッシュ済み → 即座にGemini高品質音声
       if (audioCache.has(cacheKey)) {
         await playGeminiTTS(text, apiKey, voiceName, speed);
         return;
       }
+      // キャッシュなし → Geminiを最大3秒待つ（人間らしい声を優先）
+      try {
+        const geminiPromise = callGeminiTTS(text, apiKey, voiceName).then(result => {
+          const blob = ttsResultToBlob(result);
+          if (audioCache.size >= MAX_CACHE_SIZE) {
+            const firstKey = audioCache.keys().next().value;
+            if (firstKey) audioCache.delete(firstKey);
+          }
+          audioCache.set(cacheKey, blob);
+          return blob;
+        });
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
+        const blob = await Promise.race([geminiPromise, timeoutPromise]);
+        if (blob) {
+          // Geminiが間に合った → 高品質音声で再生
+          const url = URL.createObjectURL(blob);
+          if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
+          currentAudioUrl = url;
+          const audio = getOrCreateAudio();
+          audio.src = url;
+          audio.playbackRate = speed;
+          isSpeakingNow = true;
+          await new Promise<void>((resolve) => {
+            audio.onended = () => { isSpeakingNow = false; resolve(); };
+            audio.onerror = () => { isSpeakingNow = false; resolve(); };
+            audio.play().catch(() => { isSpeakingNow = false; resolve(); });
+          });
+          return;
+        }
+        // タイムアウト → ブラウザTTSにフォールバック
+      } catch {
+        // Gemini失敗 → ブラウザTTSにフォールバック
+      }
     }
-    // キャッシュなし → ブラウザTTSで即座に読む + 裏でGemini先読み
     await playBrowserTTS(text, speed);
-    if (apiKey) {
-      prefetchGeminiTTS(text, apiKey, voiceName);
-    }
     return;
   }
 
