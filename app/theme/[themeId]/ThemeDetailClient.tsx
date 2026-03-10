@@ -90,7 +90,7 @@ export default function ThemeDetailClient({ themeId }: { themeId: string }) {
             const m = masteries.find(ms => ms.vocabId === item.id);
             return <VocabCard key={item.id} item={item} masteryLevel={m?.masteryLevel} size="sm" onClick={() => {
               if (settings.voiceEnabled) {
-                speakText(item.ttsText || item.word, settings.apiKey || null, settings.voiceName, settings.voiceSpeed, true).catch(() => {});
+                speakText(item.ttsText || item.word, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});
               }
             }} />;
           })}

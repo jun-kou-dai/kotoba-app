@@ -34,7 +34,7 @@ export default function KikuMode({ questions, onComplete }: KikuModeProps) {
   // 音声再生
   useEffect(() => {
     if (settings.voiceEnabled && quiz.target) {
-      speakText(`${quiz.target.ttsText || quiz.target.word}は どれかな？`, settings.apiKey || null, settings.voiceName, settings.voiceSpeed, true).catch(() => {});
+      speakText(`${quiz.target.ttsText || quiz.target.word}は どれかな？`, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});
     }
   }, [index, quiz.target, settings]);
 

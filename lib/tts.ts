@@ -1,10 +1,12 @@
 // TTS統合 (Gemini TTS + Web Speech API フォールバック)
+// nano-storybook と同じアプローチ: Gemini優先、失敗時ブラウザTTSフォールバック
 import { callGeminiTTS, ttsResultToBlob } from './gemini';
 
 // iOS Safari対策: Audioオブジェクトを1つだけ作成し使い回す
 let persistentAudio: HTMLAudioElement | null = null;
 let currentAudioUrl: string | null = null;
 let isSpeakingNow = false;
+let speechCancelId = 0; // 音声キャンセル用ID
 
 // ブラウザTTS: 日本語音声をキャッシュ
 let cachedJapaneseVoice: SpeechSynthesisVoice | null = null;
@@ -32,6 +34,7 @@ export function isSpeaking(): boolean {
 }
 
 export function stopSpeaking(): void {
+  speechCancelId++; // 進行中の音声をキャンセル
   isSpeakingNow = false;
   if (persistentAudio) {
     persistentAudio.pause();
@@ -80,25 +83,37 @@ function preloadVoices(): void {
   }
 }
 
-async function playGeminiTTS(text: string, apiKey: string, voiceName: string, speed: number): Promise<void> {
+/** Gemini音声を再生（nano-storybookのplayGeminiAudioと同じアプローチ） */
+async function playGeminiAudio(text: string, apiKey: string, voiceName: string, speed: number): Promise<void> {
+  const myId = ++speechCancelId;
   const cacheKey = `${voiceName}:${text}`;
 
   let blob = audioCache.get(cacheKey);
   if (!blob) {
+    console.log(`🔊 Gemini TTS取得中: "${text.substring(0, 20)}..."`);
     const result = await callGeminiTTS(text, apiKey, voiceName);
+    if (speechCancelId !== myId) return; // キャンセルされた
     blob = ttsResultToBlob(result);
 
-    // キャッシュに保存（上限管理）
+    // キャッシュに保存
     if (audioCache.size >= MAX_CACHE_SIZE) {
       const firstKey = audioCache.keys().next().value;
       if (firstKey) audioCache.delete(firstKey);
     }
     audioCache.set(cacheKey, blob);
+    console.log(`✅ Gemini TTS成功: "${text.substring(0, 20)}..."`);
+  } else {
+    console.log(`📦 キャッシュから再生: "${text.substring(0, 20)}..."`);
+  }
+  if (speechCancelId !== myId) return;
+
+  // 前回のObjectURLを解放
+  if (currentAudioUrl) {
+    URL.revokeObjectURL(currentAudioUrl);
+    currentAudioUrl = null;
   }
 
   const url = URL.createObjectURL(blob);
-
-  if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
   currentAudioUrl = url;
 
   const audio = getOrCreateAudio();
@@ -108,23 +123,36 @@ async function playGeminiTTS(text: string, apiKey: string, voiceName: string, sp
 
   return new Promise<void>((resolve) => {
     audio.onended = () => {
+      if (currentAudioUrl === url) {
+        URL.revokeObjectURL(url);
+        currentAudioUrl = null;
+      }
       isSpeakingNow = false;
       resolve();
     };
     audio.onerror = () => {
+      if (currentAudioUrl === url) {
+        URL.revokeObjectURL(url);
+        currentAudioUrl = null;
+      }
       isSpeakingNow = false;
-      resolve();
+      console.warn('Gemini音声再生エラー、ブラウザTTSにフォールバック');
+      playBrowserTTS(text, speed).then(resolve);
     };
     audio.play().catch(() => {
+      if (currentAudioUrl === url) {
+        URL.revokeObjectURL(url);
+        currentAudioUrl = null;
+      }
       isSpeakingNow = false;
-      resolve();
+      console.warn('Gemini音声play()失敗、ブラウザTTSにフォールバック');
+      playBrowserTTS(text, speed).then(resolve);
     });
   });
 }
 
 /** ブラウザTTS用: 助詞「は」を「わ」に変換（自然な発音のため） */
 function convertParticleHa(text: string): string {
-  // 「〜は どれ」「〜は？」など助詞の「は」を「わ」に変換
   return text.replace(/は(\s|？|。|、|$)/g, 'わ$1');
 }
 
@@ -135,17 +163,14 @@ function playBrowserTTS(text: string, speed: number): Promise<void> {
       return;
     }
 
-    // Chromeのバグ対策: cancel→少し待ってからspeak
     window.speechSynthesis.cancel();
 
-    // 助詞「は」の発音修正
     const ttsText = convertParticleHa(text);
     const utterance = new SpeechSynthesisUtterance(ttsText);
     utterance.lang = 'ja-JP';
     utterance.rate = speed;
-    utterance.pitch = 1.1; // 子ども向けに少し高め
+    utterance.pitch = 1.1;
 
-    // 明示的に日本語音声を設定
     if (cachedJapaneseVoice) {
       utterance.voice = cachedJapaneseVoice;
     }
@@ -154,7 +179,6 @@ function playBrowserTTS(text: string, speed: number): Promise<void> {
     utterance.onend = () => { isSpeakingNow = false; resolve(); };
     utterance.onerror = () => { isSpeakingNow = false; resolve(); };
 
-    // Chrome バグ対策: 少し遅延を入れてから再生
     setTimeout(() => {
       window.speechSynthesis.speak(utterance);
     }, 50);
@@ -162,50 +186,26 @@ function playBrowserTTS(text: string, speed: number): Promise<void> {
 }
 
 /**
- * 音声を再生する
- * @param instant trueの場合、キャッシュにGemini音声があれば即座に再生。
- *               なければブラウザTTSで即座に読み上げ + 裏でGemini先読み。
- *               falseの場合、Gemini取得を試みる（ボタンタップ用）。
+ * 音声を再生する（nano-storybookと同じアプローチ）
+ * APIキーがあればGemini TTS（人間らしい声）を使用。
+ * 失敗時のみブラウザTTSにフォールバック。
  */
 export async function speakText(
   text: string,
   apiKey: string | null,
   voiceName: string = 'Aoede',
   speed: number = 0.85,
-  instant: boolean = false,
 ): Promise<void> {
   stopSpeaking();
 
-  if (instant) {
-    // キャッシュにGemini高品質音声があれば即座にそれを使う
-    if (apiKey) {
-      const cacheKey = `${voiceName}:${text}`;
-      if (audioCache.has(cacheKey)) {
-        await playGeminiTTS(text, apiKey, voiceName, speed);
-        return;
-      }
-      // 裏でGemini先読み開始
-      prefetchGeminiTTS(text, apiKey, voiceName);
-    }
-    // ブラウザTTSで即座に読み上げ
-    await playBrowserTTS(text, speed);
-    return;
-  }
-
-  // ボタンタップ: キャッシュにあればGemini、なければブラウザTTS
+  // Gemini TTS優先（nano-storybookと同じ）
   if (apiKey) {
-    const cacheKey = `${voiceName}:${text}`;
-    if (audioCache.has(cacheKey)) {
-      // キャッシュ済み → Gemini高品質音声
-      await playGeminiTTS(text, apiKey, voiceName, speed);
-      return;
-    }
-    // キャッシュなし → Gemini取得を試みる
     try {
-      await playGeminiTTS(text, apiKey, voiceName, speed);
+      await playGeminiAudio(text, apiKey, voiceName, speed);
       return;
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
+      console.warn('Gemini TTS error, ブラウザTTSにフォールバック:', msg);
       if (msg.includes('APIキーが無効')) throw e;
       // フォールバックへ
     }
@@ -216,15 +216,13 @@ export async function speakText(
 /** 複数テキストのGemini音声をまとめてキャッシュに先読み */
 export function prefetchAudio(texts: string[], apiKey: string | null, voiceName: string = 'Aoede'): void {
   if (!apiKey) return;
-  // 同時リクエスト数を制限（3つずつ）
   let i = 0;
   const next = () => {
     if (i >= texts.length) return;
     const text = texts[i++];
     prefetchGeminiTTS(text, apiKey, voiceName);
-    setTimeout(next, 200); // 200ms間隔で順次開始
+    setTimeout(next, 300);
   };
-  // 最初の3つを同時開始
   for (let j = 0; j < Math.min(3, texts.length); j++) {
     next();
   }
@@ -243,6 +241,9 @@ function prefetchGeminiTTS(text: string, apiKey: string, voiceName: string): voi
         if (firstKey) audioCache.delete(firstKey);
       }
       audioCache.set(cacheKey, blob);
+      console.log(`📦 先読み完了: "${text.substring(0, 20)}..."`);
     })
-    .catch(() => {}); // 先読み失敗は無視
+    .catch((e) => {
+      console.warn(`⚠️ 先読み失敗: "${text.substring(0, 20)}..."`, e.message);
+    });
 }

@@ -22,7 +22,7 @@ export default function MiruMode({ questions, onComplete }: MiruModeProps) {
   // 自動音声再生 (ブラウザTTSで即座に + 裏でGemini先読み)
   useEffect(() => {
     if (settings.voiceEnabled && current) {
-      speakText(current.ttsText || current.word, settings.apiKey || null, settings.voiceName, settings.voiceSpeed, true).catch(() => {});
+      speakText(current.ttsText || current.word, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});
     }
   }, [index, current, settings]);
 
