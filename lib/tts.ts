@@ -122,6 +122,12 @@ async function playGeminiTTS(text: string, apiKey: string, voiceName: string, sp
   });
 }
 
+/** ブラウザTTS用: 助詞「は」を「わ」に変換（自然な発音のため） */
+function convertParticleHa(text: string): string {
+  // 「〜は どれ」「〜は？」など助詞の「は」を「わ」に変換
+  return text.replace(/は(\s|？|。|、|$)/g, 'わ$1');
+}
+
 function playBrowserTTS(text: string, speed: number): Promise<void> {
   return new Promise<void>((resolve) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) {
@@ -132,7 +138,9 @@ function playBrowserTTS(text: string, speed: number): Promise<void> {
     // Chromeのバグ対策: cancel→少し待ってからspeak
     window.speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    // 助詞「は」の発音修正
+    const ttsText = convertParticleHa(text);
+    const utterance = new SpeechSynthesisUtterance(ttsText);
     utterance.lang = 'ja-JP';
     utterance.rate = speed;
     utterance.pitch = 1.1; // 子ども向けに少し高め
@@ -169,9 +177,16 @@ export async function speakText(
   stopSpeaking();
 
   if (instant) {
-    // 自動再生: ブラウザTTSで即座に読む
+    // キャッシュにGemini高品質音声があれば即座にそれを使う
+    if (apiKey) {
+      const cacheKey = `${voiceName}:${text}`;
+      if (audioCache.has(cacheKey)) {
+        await playGeminiTTS(text, apiKey, voiceName, speed);
+        return;
+      }
+    }
+    // キャッシュなし → ブラウザTTSで即座に読む + 裏でGemini先読み
     await playBrowserTTS(text, speed);
-    // 裏でGemini音声をキャッシュに先読み（再生はしない）
     if (apiKey) {
       prefetchGeminiTTS(text, apiKey, voiceName);
     }
@@ -197,6 +212,23 @@ export async function speakText(
     }
   }
   await playBrowserTTS(text, speed);
+}
+
+/** 複数テキストのGemini音声をまとめてキャッシュに先読み */
+export function prefetchAudio(texts: string[], apiKey: string | null, voiceName: string = 'Aoede'): void {
+  if (!apiKey) return;
+  // 同時リクエスト数を制限（3つずつ）
+  let i = 0;
+  const next = () => {
+    if (i >= texts.length) return;
+    const text = texts[i++];
+    prefetchGeminiTTS(text, apiKey, voiceName);
+    setTimeout(next, 200); // 200ms間隔で順次開始
+  };
+  // 最初の3つを同時開始
+  for (let j = 0; j < Math.min(3, texts.length); j++) {
+    next();
+  }
 }
 
 /** Gemini音声をキャッシュに先読み（再生しない） */

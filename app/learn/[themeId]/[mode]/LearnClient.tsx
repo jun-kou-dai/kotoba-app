@@ -7,6 +7,7 @@ import { selectQuestions, processSessionResults } from '../../../../lib/learning
 import { MasteryStatus, SessionAnswer } from '../../../../types/learning';
 import { ThemeId, LearningMode, VocabularyItem } from '../../../../types/vocabulary';
 import { getThemeById } from '../../../../data/themes';
+import { prefetchAudio } from '../../../../lib/tts';
 import BackButton from '../../../../components/ui/BackButton';
 import ProgressBar from '../../../../components/ui/ProgressBar';
 import MiruMode from '../../../../components/learn/MiruMode';
@@ -23,7 +24,7 @@ const MODE_LABELS: Record<LearningMode, string> = {
 
 export default function LearnClient({ themeId, mode }: { themeId: string; mode: string }) {
   const router = useRouter();
-  const { currentChild, isLoading } = useApp();
+  const { currentChild, isLoading, settings } = useApp();
   const [questions, setQuestions] = useState<VocabularyItem[]>([]);
   const [startedAt] = useState(new Date().toISOString());
   const [isReady, setIsReady] = useState(false);
@@ -38,6 +39,21 @@ export default function LearnClient({ themeId, mode }: { themeId: string; mode: 
       const qs = selectQuestions(themeId as ThemeId, learningMode, masteries);
       setQuestions(qs);
       setIsReady(true);
+
+      // 全問題の音声をGeminiで先読み（2回目以降はキャッシュから即座に再生）
+      if (settings.voiceEnabled && settings.apiKey) {
+        const textsToFetch: string[] = [];
+        if (learningMode === 'miru') {
+          qs.forEach(q => textsToFetch.push(q.ttsText || q.word));
+        } else if (learningMode === 'kiku') {
+          qs.forEach(q => textsToFetch.push(`${q.ttsText || q.word}は どれかな？`));
+        } else if (learningMode === 'erabu') {
+          qs.forEach(q => textsToFetch.push(`${q.ttsText || q.word}は どれ？`));
+        } else if (learningMode === 'nakamawake' && theme) {
+          textsToFetch.push(`${theme.name}は どれ？`);
+        }
+        prefetchAudio(textsToFetch, settings.apiKey, settings.voiceName);
+      }
     });
   }, [currentChild, isLoading, themeId, learningMode, router]);
 

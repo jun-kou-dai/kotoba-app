@@ -11,7 +11,7 @@ import BackButton from '../../../components/ui/BackButton';
 import VocabCard from '../../../components/VocabCard';
 import BigButton from '../../../components/ui/BigButton';
 import ProgressBar from '../../../components/ui/ProgressBar';
-import { speakText } from '../../../lib/tts';
+import { speakText, prefetchAudio } from '../../../lib/tts';
 
 const MODES: { id: LearningMode; emoji: string; name: string; desc: string }[] = [
   { id: 'miru', emoji: '👀', name: 'みる', desc: 'カードを みてみよう' },
@@ -32,7 +32,14 @@ export default function ThemeDetailClient({ themeId }: { themeId: string }) {
     if (isLoading) return;
     if (!currentChild) { router.replace('/'); return; }
     getMasteryByChild(currentChild.id).then(setMasteries);
-  }, [currentChild, isLoading, router]);
+
+    // テーマ詳細表示時に全単語の音声をGeminiで先読み
+    if (settings.voiceEnabled && settings.apiKey && vocabItems.length > 0) {
+      const texts = vocabItems.map(v => v.ttsText || v.word);
+      prefetchAudio(texts, settings.apiKey, settings.voiceName);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentChild, isLoading, router, themeId]);
 
   if (!theme) return <div className="p-6 text-center">テーマが みつかりません</div>;
 
