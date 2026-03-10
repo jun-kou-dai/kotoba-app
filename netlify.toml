@@ -1,0 +1,21 @@
+[build]
+  command = "npm run build"
+  publish = "out"
+
+# キャッシュ設定: 静的アセットは長期キャッシュ
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# HTML は短いキャッシュ（更新反映のため）
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# SPA フォールバック: 存在しないパスは404ページへ
+[[redirects]]
+  from = "/*"
+  to = "/404.html"
+  status = 404
