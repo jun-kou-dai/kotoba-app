@@ -33,9 +33,16 @@ export default function ThemeDetailClient({ themeId }: { themeId: string }) {
     if (!currentChild) { router.replace('/'); return; }
     getMasteryByChild(currentChild.id).then(setMasteries);
 
-    // テーマ詳細表示時に全単語の音声をGeminiで先読み
+    // テーマ詳細表示時に全モードの音声をGeminiで先読み
+    // ユーザーがモードを選ぶまでの間にキャッシュを温める
     if (settings.voiceEnabled && settings.apiKey && vocabItems.length > 0) {
-      const texts = vocabItems.map(v => v.ttsText || v.word);
+      const texts: string[] = [];
+      // みるモード用: 単語のみ
+      vocabItems.forEach(v => texts.push(v.ttsText || v.word));
+      // きくモード用: 「〜は どれかな？」
+      vocabItems.forEach(v => texts.push(`${v.ttsText || v.word}は どれかな？`));
+      // なかまわけモード用: 「テーマ名は どれ？」
+      if (theme) texts.push(`${theme.name}は どれ？`);
       prefetchAudio(texts, settings.apiKey, settings.voiceName);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
