@@ -11,6 +11,7 @@ import BackButton from '../../../components/ui/BackButton';
 import VocabCard from '../../../components/VocabCard';
 import BigButton from '../../../components/ui/BigButton';
 import ProgressBar from '../../../components/ui/ProgressBar';
+import { speakText } from '../../../lib/tts';
 
 const MODES: { id: LearningMode; emoji: string; name: string; desc: string }[] = [
   { id: 'miru', emoji: '👀', name: 'みる', desc: 'カードを みてみよう' },
@@ -21,7 +22,7 @@ const MODES: { id: LearningMode; emoji: string; name: string; desc: string }[] =
 
 export default function ThemeDetailClient({ themeId }: { themeId: string }) {
   const router = useRouter();
-  const { currentChild, isLoading } = useApp();
+  const { currentChild, isLoading, settings } = useApp();
   const [masteries, setMasteries] = useState<MasteryStatus[]>([]);
 
   const theme = getThemeById(themeId);
@@ -60,7 +61,11 @@ export default function ThemeDetailClient({ themeId }: { themeId: string }) {
         <div className="grid grid-cols-3 gap-3">
           {vocabItems.map(item => {
             const m = masteries.find(ms => ms.vocabId === item.id);
-            return <VocabCard key={item.id} item={item} masteryLevel={m?.masteryLevel} size="sm" />;
+            return <VocabCard key={item.id} item={item} masteryLevel={m?.masteryLevel} size="sm" onClick={() => {
+              if (settings.voiceEnabled) {
+                speakText(item.ttsText || item.word, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});
+              }
+            }} />;
           })}
         </div>
       </div>
