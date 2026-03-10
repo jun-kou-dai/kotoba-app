@@ -59,7 +59,7 @@ export async function callGeminiTTS(text: string, apiKey: string, voiceName: str
   }
 
   const ttsBody = {
-    contents: [{ role: 'user', parts: [{ text: `次の文章を読んでください：\n\n${text}` }] }],
+    contents: [{ role: 'user', parts: [{ text }] }],
     generationConfig: {
       responseModalities: ['AUDIO'],
       speechConfig: {
