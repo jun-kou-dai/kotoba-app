@@ -34,7 +34,7 @@ export default function ErabuMode({ questions, onComplete }: ErabuModeProps) {
   // 音声再生
   useEffect(() => {
     if (settings.voiceEnabled && quiz.target) {
-      speakText(`${quiz.target.ttsText || quiz.target.word}は どれ？`, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});
+      speakText(`${quiz.target.ttsText || quiz.target.word}は どれ？`, settings.apiKey || null, settings.voiceName, settings.voiceSpeed, true).catch(() => {});
     }
   }, [index, quiz.target, settings]);
 

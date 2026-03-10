@@ -45,7 +45,7 @@ export default function NakamawakeMode({ themeId, questionCount, onComplete }: N
 
   useEffect(() => {
     if (settings.voiceEnabled && theme) {
-      speakText(`${theme.name}は どれ？`, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});
+      speakText(`${theme.name}は どれ？`, settings.apiKey || null, settings.voiceName, settings.voiceSpeed, true).catch(() => {});
     }
   }, [index, theme, settings]);
 

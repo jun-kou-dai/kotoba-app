@@ -19,10 +19,10 @@ export default function MiruMode({ questions, onComplete }: MiruModeProps) {
 
   const current = questions[index];
 
-  // 自動音声再生
+  // 自動音声再生 (ブラウザTTSで即座に + 裏でGemini先読み)
   useEffect(() => {
     if (settings.voiceEnabled && current) {
-      speakText(current.ttsText || current.word, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});
+      speakText(current.ttsText || current.word, settings.apiKey || null, settings.voiceName, settings.voiceSpeed, true).catch(() => {});
     }
   }, [index, current, settings]);
 
@@ -61,7 +61,7 @@ export default function MiruMode({ questions, onComplete }: MiruModeProps) {
 
       {/* 音声 */}
       <div className="mt-6">
-        <SpeakButton text={current.ttsText || current.word} label="きいてみよう" />
+        <SpeakButton text={current.ttsText || current.word} label="もういちど きく" />
       </div>
 
       {/* ナビゲーション */}

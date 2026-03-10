@@ -153,15 +153,40 @@ function playBrowserTTS(text: string, speed: number): Promise<void> {
   });
 }
 
+/**
+ * 音声を再生する
+ * @param instant trueの場合、ブラウザTTSで即座に読み上げ（自動再生用）。
+ *               裏でGemini音声をキャッシュに先読みする。
+ *               falseの場合、キャッシュにあればGemini、なければブラウザTTS（ボタンタップ用）。
+ */
 export async function speakText(
   text: string,
   apiKey: string | null,
   voiceName: string = 'Aoede',
   speed: number = 0.85,
+  instant: boolean = false,
 ): Promise<void> {
   stopSpeaking();
 
+  if (instant) {
+    // 自動再生: ブラウザTTSで即座に読む
+    await playBrowserTTS(text, speed);
+    // 裏でGemini音声をキャッシュに先読み（再生はしない）
+    if (apiKey) {
+      prefetchGeminiTTS(text, apiKey, voiceName);
+    }
+    return;
+  }
+
+  // ボタンタップ: キャッシュにあればGemini、なければブラウザTTS
   if (apiKey) {
+    const cacheKey = `${voiceName}:${text}`;
+    if (audioCache.has(cacheKey)) {
+      // キャッシュ済み → Gemini高品質音声
+      await playGeminiTTS(text, apiKey, voiceName, speed);
+      return;
+    }
+    // キャッシュなし → Gemini取得を試みる
     try {
       await playGeminiTTS(text, apiKey, voiceName, speed);
       return;
@@ -172,4 +197,21 @@ export async function speakText(
     }
   }
   await playBrowserTTS(text, speed);
+}
+
+/** Gemini音声をキャッシュに先読み（再生しない） */
+function prefetchGeminiTTS(text: string, apiKey: string, voiceName: string): void {
+  const cacheKey = `${voiceName}:${text}`;
+  if (audioCache.has(cacheKey)) return;
+
+  callGeminiTTS(text, apiKey, voiceName)
+    .then(result => {
+      const blob = ttsResultToBlob(result);
+      if (audioCache.size >= MAX_CACHE_SIZE) {
+        const firstKey = audioCache.keys().next().value;
+        if (firstKey) audioCache.delete(firstKey);
+      }
+      audioCache.set(cacheKey, blob);
+    })
+    .catch(() => {}); // 先読み失敗は無視
 }
