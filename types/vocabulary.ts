@@ -19,6 +19,8 @@ export interface VocabularyItem {
   themeId: ThemeId;
   word: string;
   reading: string;
+  /** TTS用テキスト（外来語のカタカナ表記など。未指定時はwordを使用） */
+  ttsText?: string;
   emoji: string;
   imageUrl?: string;
   hint?: string;

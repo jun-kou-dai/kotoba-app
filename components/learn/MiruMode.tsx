@@ -22,7 +22,7 @@ export default function MiruMode({ questions, onComplete }: MiruModeProps) {
   // 自動音声再生
   useEffect(() => {
     if (settings.voiceEnabled && current) {
-      speakText(current.word, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});
+      speakText(current.ttsText || current.word, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});
     }
   }, [index, current, settings]);
 
@@ -61,7 +61,7 @@ export default function MiruMode({ questions, onComplete }: MiruModeProps) {
 
       {/* 音声 */}
       <div className="mt-6">
-        <SpeakButton text={current.word} label="きいてみよう" />
+        <SpeakButton text={current.ttsText || current.word} label="きいてみよう" />
       </div>
 
       {/* ナビゲーション */}
