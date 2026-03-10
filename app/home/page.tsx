@@ -13,7 +13,7 @@ import { preloadSounds, initAudioForInteraction } from '../../lib/audio';
 
 export default function HomePage() {
   const router = useRouter();
-  const { currentChild, isLoading } = useApp();
+  const { currentChild, isLoading, settings } = useApp();
   const [masteries, setMasteries] = useState<MasteryStatus[]>([]);
   const [streak, setStreak] = useState(0);
 
@@ -64,6 +64,19 @@ export default function HomePage() {
           <button onClick={() => router.push('/settings')} className="text-2xl p-2">⚙️</button>
         </div>
       </div>
+
+      {/* APIキー未設定の案内 */}
+      {settings.voiceEnabled && !settings.apiKey && (
+        <button
+          onClick={() => router.push('/settings')}
+          className="w-full bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 mb-4 text-left active:scale-[0.98] transition-transform"
+        >
+          <div className="text-lg font-extrabold text-amber-700">🔊 こえの せってい</div>
+          <div className="text-sm text-amber-600 mt-1">
+            きれいな こえで よむには Gemini API キーが ひつようです。タップして せっていしてね
+          </div>
+        </button>
+      )}
 
       {/* きょうのことば */}
       <div className="bg-white rounded-2xl p-5 shadow-md mb-6 text-center">

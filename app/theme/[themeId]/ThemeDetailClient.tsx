@@ -69,6 +69,19 @@ export default function ThemeDetailClient({ themeId }: { themeId: string }) {
         </div>
       </div>
 
+      {/* APIキー未設定の案内 */}
+      {settings.voiceEnabled && !settings.apiKey && (
+        <button
+          onClick={() => router.push('/settings')}
+          className="w-full bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 mb-4 text-left active:scale-[0.98] transition-transform"
+        >
+          <div className="text-base font-extrabold text-amber-700">🔊 きれいな こえで よむには</div>
+          <div className="text-sm text-amber-600 mt-1">
+            せってい → API キー を いれてね
+          </div>
+        </button>
+      )}
+
       {/* ことばカード一覧 */}
       <div className="mb-6">
         <h2 className="text-lg font-extrabold mb-3">ことば</h2>
