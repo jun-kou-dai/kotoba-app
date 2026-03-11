@@ -40,13 +40,13 @@ export default function LearnClient({ themeId, mode }: { themeId: string; mode: 
       setQuestions(qs);
       setIsReady(true);
 
-      // 全問題の音声をGeminiで先読み（2回目以降はキャッシュから即座に再生）
+      // 最初の2問だけ先読み（429回避のため最小限に）
       if (settings.voiceEnabled && settings.apiKey) {
         const textsToFetch: string[] = [];
         if (learningMode === 'miru') {
-          qs.forEach(q => textsToFetch.push(q.ttsText || q.word));
+          qs.slice(0, 2).forEach(q => textsToFetch.push(q.ttsText || q.word));
         } else if (learningMode === 'kiku') {
-          qs.forEach(q => textsToFetch.push(`${q.ttsText || q.word}は どれかな？`));
+          qs.slice(0, 2).forEach(q => textsToFetch.push(`${q.ttsText || q.word}は どれかな？`));
         } else if (learningMode === 'nakamawake' && theme) {
           textsToFetch.push(`${theme.name}は どれ？`);
         }

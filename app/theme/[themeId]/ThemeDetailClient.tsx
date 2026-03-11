@@ -33,16 +33,9 @@ export default function ThemeDetailClient({ themeId }: { themeId: string }) {
     if (!currentChild) { router.replace('/'); return; }
     getMasteryByChild(currentChild.id).then(setMasteries);
 
-    // テーマ詳細表示時に全モードの音声をGeminiで先読み
-    // ユーザーがモードを選ぶまでの間にキャッシュを温める
+    // テーマ詳細表示時に最初の数語だけ先読み（429回避のため最小限に）
     if (settings.voiceEnabled && settings.apiKey && vocabItems.length > 0) {
-      const texts: string[] = [];
-      // みるモード用: 単語のみ
-      vocabItems.forEach(v => texts.push(v.ttsText || v.word));
-      // きくモード用: 「〜は どれかな？」
-      vocabItems.forEach(v => texts.push(`${v.ttsText || v.word}は どれかな？`));
-      // なかまわけモード用: 「テーマ名は どれ？」
-      if (theme) texts.push(`${theme.name}は どれ？`);
+      const texts = vocabItems.slice(0, 3).map(v => v.ttsText || v.word);
       prefetchAudio(texts, settings.apiKey, settings.voiceName);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
