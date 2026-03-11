@@ -42,9 +42,11 @@ const TTS_MODELS = [
 ];
 let workingTTSModel: string | null = null;
 let ttsQuotaExhausted = false;
+let ttsRateLimitedUntil = 0; // 429受信後のクールダウン期限（timestamp）
 
 export function resetTTSQuota(): void {
   ttsQuotaExhausted = false;
+  ttsRateLimitedUntil = 0;
   workingTTSModel = null;
 }
 
@@ -56,6 +58,10 @@ interface TTSResult {
 export async function callGeminiTTS(text: string, apiKey: string, voiceName: string = 'Aoede'): Promise<TTSResult> {
   if (ttsQuotaExhausted) {
     throw new Error('TTS_QUOTA_EXHAUSTED');
+  }
+  // 429クールダウン中はリクエストせず即座にフォールバック
+  if (Date.now() < ttsRateLimitedUntil) {
+    throw new Error('TTS_RATE_LIMITED');
   }
 
   const ttsBody = {
@@ -70,39 +76,35 @@ export async function callGeminiTTS(text: string, apiKey: string, voiceName: str
     }
   };
 
-  const models = workingTTSModel
-    ? [workingTTSModel, ...TTS_MODELS.filter(m => m !== workingTTSModel)]
-    : TTS_MODELS;
+  // 成功実績のあるモデルのみ使う（なければ1番目だけ試す）
+  const model = workingTTSModel || TTS_MODELS[0];
 
-  for (const model of models) {
-    for (let retry = 0; retry < 3; retry++) {
-      try {
-        const data = await geminiRequest(model, 'generateContent', ttsBody, apiKey);
-        const candidates = data.candidates as Array<{ content?: { parts?: Array<{ inlineData?: { data: string; mimeType: string } }> } }> | undefined;
-        const parts = candidates?.[0]?.content?.parts || [];
-        for (const part of parts) {
-          if (part.inlineData?.data) {
-            workingTTSModel = model;
-            return { data: part.inlineData.data, mimeType: part.inlineData.mimeType || 'audio/L16;rate=24000' };
-          }
-        }
-        break;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        if (msg.includes('ネットワーク') || msg.includes('APIキーが無効')) throw e;
-        if (msg.includes('limit: 0') || (msg.includes('quota') && msg.includes('exceeded'))) {
-          ttsQuotaExhausted = true;
-          throw new Error('TTS_QUOTA_EXHAUSTED');
-        }
-        if ((msg.includes('429') || msg.includes('rate') || msg.includes('制限')) && retry < 2) {
-          await new Promise(r => setTimeout(r, (retry + 1) * 15000));
-          continue;
-        }
-        break;
+  try {
+    const data = await geminiRequest(model, 'generateContent', ttsBody, apiKey);
+    const candidates = data.candidates as Array<{ content?: { parts?: Array<{ inlineData?: { data: string; mimeType: string } }> } }> | undefined;
+    const parts = candidates?.[0]?.content?.parts || [];
+    for (const part of parts) {
+      if (part.inlineData?.data) {
+        workingTTSModel = model;
+        return { data: part.inlineData.data, mimeType: part.inlineData.mimeType || 'audio/L16;rate=24000' };
       }
     }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes('ネットワーク') || msg.includes('APIキーが無効')) throw e;
+    if (msg.includes('limit: 0') || (msg.includes('quota') && msg.includes('exceeded'))) {
+      ttsQuotaExhausted = true;
+      throw new Error('TTS_QUOTA_EXHAUSTED');
+    }
+    // 429: リトライせず即座にフォールバック。60秒間Geminiをスキップ
+    if (msg.includes('429') || msg.includes('rate') || msg.includes('制限')) {
+      ttsRateLimitedUntil = Date.now() + 60_000;
+      console.warn('⚠️ Gemini TTS 429 → 60秒間ブラウザTTSに切替');
+      throw new Error('TTS_RATE_LIMITED');
+    }
+    throw e;
   }
-  throw new Error('全てのTTSモデルが利用できません');
+  throw new Error('TTS応答にオーディオデータがありません');
 }
 
 // PCM→WAV変換
