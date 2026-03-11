@@ -3,7 +3,7 @@ import { ChildProfile } from '../types/profile';
 import { LearningSession, MasteryStatus, DailyRecord, calcMasteryLevel } from '../types/learning';
 
 const DB_NAME = 'KotobaApp';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORES = {
   profiles: 'profiles',
