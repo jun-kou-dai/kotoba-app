@@ -17,8 +17,13 @@ async function geminiRequest(model: string, action: string, body: object, apiKey
     const errBody = await res.json().catch(() => ({})) as { error?: { message?: string } };
     const msg = errBody.error?.message || `HTTP ${res.status}`;
     if (res.status === 401 || res.status === 403) throw new Error('APIキーが無効です。');
+    if (res.status === 400 && msg.toLowerCase().includes('api key')) throw new Error('APIキーが無効です。');
     if (res.status === 404) throw new Error(`モデル "${model}" が見つかりません。`);
-    if (res.status === 429) throw new Error(`API_429: ${msg}`);
+    if (res.status === 429) {
+      // TTS側でクォータ枯渇vsレート制限を区別するため原文を含める
+      const isQuota = msg.toLowerCase().includes('quota') || msg.includes('per_day');
+      throw new Error(isQuota ? 'API_429_QUOTA' : 'API_429_RATE');
+    }
     if (res.status >= 500) throw new Error('Googleサーバーエラーです。');
     throw new Error(`APIエラー: ${msg}`);
   }
@@ -26,9 +31,16 @@ async function geminiRequest(model: string, action: string, body: object, apiKey
 }
 
 export async function validateApiKey(apiKey: string): Promise<boolean> {
-  const data = await geminiRequest('gemini-2.5-flash', 'generateContent', {
-    contents: [{ role: 'user', parts: [{ text: 'Say "OK" in one word.' }] }],
-  }, apiKey);
+  let data: Record<string, unknown>;
+  try {
+    data = await geminiRequest('gemini-2.5-flash', 'generateContent', {
+      contents: [{ role: 'user', parts: [{ text: 'Say "OK" in one word.' }] }],
+    }, apiKey);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '';
+    if (msg.startsWith('API_429')) throw new Error('API制限に達しました。しばらく待ってください。');
+    throw e;
+  }
   const candidates = data.candidates as Array<{ content?: { parts?: Array<{ text?: string }> } }> | undefined;
   const text = candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error('APIからの応答が空です');
@@ -75,6 +87,8 @@ export async function callGeminiTTS(text: string, apiKey: string, voiceName: str
     ? [workingTTSModel, ...TTS_MODELS.filter(m => m !== workingTTSModel)]
     : TTS_MODELS;
 
+  let quotaExhaustedCount = 0;
+
   for (const model of models) {
     for (let retry = 0; retry < 2; retry++) {
       try {
@@ -91,14 +105,14 @@ export async function callGeminiTTS(text: string, apiKey: string, voiceName: str
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.includes('ネットワーク') || msg.includes('APIキーが無効')) throw e;
-        // 日次クォータ枯渇: "quota exceeded" or "Quota exceeded" in raw API message
-        if (msg.includes('API_429') && (msg.toLowerCase().includes('quota') || msg.includes('per_day') || msg.includes('per_model_per_day'))) {
-          ttsQuotaExhausted = true;
-          console.warn('🔇 TTS日次クォータ枯渇 → 以降ブラウザTTSに切替');
-          throw new Error('TTS_QUOTA_EXHAUSTED');
+        // 日次クォータ枯渇: このモデルはスキップして次のモデルへ
+        if (msg === 'API_429_QUOTA') {
+          quotaExhaustedCount++;
+          console.warn(`🔇 ${model} 日次クォータ枯渇 → 次のモデルへ`);
+          break;
         }
         // 一時的レート制限: 15秒リトライ1回だけ
-        if (msg.includes('API_429') && retry < 1) {
+        if (msg === 'API_429_RATE' && retry < 1) {
           console.log(`⏳ TTS レート制限、15秒待機... (${model})`);
           await new Promise(r => setTimeout(r, 15_000));
           continue;
@@ -106,6 +120,12 @@ export async function callGeminiTTS(text: string, apiKey: string, voiceName: str
         break; // その他のエラー or リトライ上限 → 次のモデルへ
       }
     }
+  }
+
+  // 全モデルがクォータ枯渇ならフラグを立てる
+  if (quotaExhaustedCount >= models.length) {
+    ttsQuotaExhausted = true;
+    throw new Error('TTS_QUOTA_EXHAUSTED');
   }
   throw new Error('TTS応答にオーディオデータがありません');
 }
