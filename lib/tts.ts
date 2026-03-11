@@ -1,6 +1,7 @@
 // TTS統合 (Gemini TTS + Web Speech API フォールバック)
 // nano-storybook と同じアプローチ: Gemini優先、失敗時ブラウザTTSフォールバック
 import { callGeminiTTS, ttsResultToBlob } from './gemini';
+import { getAudioCache, saveAudioCache } from './db';
 
 // iOS Safari対策: Audioオブジェクトを1つだけ作成し使い回す
 let persistentAudio: HTMLAudioElement | null = null;
@@ -12,9 +13,8 @@ let speechCancelId = 0; // 音声キャンセル用ID
 let cachedJapaneseVoice: SpeechSynthesisVoice | null = null;
 let voicesLoaded = false;
 
-// Gemini TTS: 音声キャッシュ (同じ単語の再生を高速化)
-const audioCache = new Map<string, Blob>();
-const MAX_CACHE_SIZE = 80;
+// Gemini TTS: セッション内Blobキャッシュ（IndexedDBからの読み込みを避ける）
+const blobCache = new Map<string, Blob>();
 
 function getOrCreateAudio(): HTMLAudioElement {
   if (!persistentAudio) {
@@ -88,22 +88,27 @@ async function playGeminiAudio(text: string, apiKey: string, voiceName: string, 
   const myId = ++speechCancelId;
   const cacheKey = `${voiceName}:${text}`;
 
-  let blob = audioCache.get(cacheKey);
+  // 1. セッション内Blobキャッシュ → 2. IndexedDB永続キャッシュ → 3. API呼び出し
+  let blob = blobCache.get(cacheKey);
+  if (!blob) {
+    const cached = await getAudioCache(cacheKey);
+    if (cached) {
+      blob = ttsResultToBlob({ data: cached.data, mimeType: cached.mimeType });
+      blobCache.set(cacheKey, blob);
+      console.log(`📦 IndexedDBキャッシュから再生: "${text.substring(0, 20)}..."`);
+    }
+  } else {
+    console.log(`📦 メモリキャッシュから再生: "${text.substring(0, 20)}..."`);
+  }
   if (!blob) {
     console.log(`🔊 Gemini TTS取得中: "${text.substring(0, 20)}..."`);
     const result = await callGeminiTTS(text, apiKey, voiceName);
-    if (speechCancelId !== myId) return; // キャンセルされた
+    if (speechCancelId !== myId) return;
     blob = ttsResultToBlob(result);
-
-    // キャッシュに保存
-    if (audioCache.size >= MAX_CACHE_SIZE) {
-      const firstKey = audioCache.keys().next().value;
-      if (firstKey) audioCache.delete(firstKey);
-    }
-    audioCache.set(cacheKey, blob);
-    console.log(`✅ Gemini TTS成功: "${text.substring(0, 20)}..."`);
-  } else {
-    console.log(`📦 キャッシュから再生: "${text.substring(0, 20)}..."`);
+    blobCache.set(cacheKey, blob);
+    // IndexedDBに永続保存（バックグラウンド、エラーは無視）
+    saveAudioCache({ key: cacheKey, data: result.data, mimeType: result.mimeType, createdAt: Date.now() }).catch(() => {});
+    console.log(`✅ Gemini TTS成功+キャッシュ保存: "${text.substring(0, 20)}..."`);
   }
   if (speechCancelId !== myId) return;
 
