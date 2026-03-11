@@ -7,7 +7,7 @@ import { selectQuestions, processSessionResults } from '../../../../lib/learning
 import { MasteryStatus, SessionAnswer } from '../../../../types/learning';
 import { ThemeId, LearningMode, VocabularyItem } from '../../../../types/vocabulary';
 import { getThemeById } from '../../../../data/themes';
-import { prefetchAudio } from '../../../../lib/tts';
+// 音声はオンデマンドで取得（nano-storybookと同じアプローチ）
 import BackButton from '../../../../components/ui/BackButton';
 import ProgressBar from '../../../../components/ui/ProgressBar';
 import MiruMode from '../../../../components/learn/MiruMode';
@@ -39,19 +39,6 @@ export default function LearnClient({ themeId, mode }: { themeId: string; mode: 
       const qs = selectQuestions(themeId as ThemeId, learningMode, masteries);
       setQuestions(qs);
       setIsReady(true);
-
-      // 最初の2問だけ先読み（429回避のため最小限に）
-      if (settings.voiceEnabled && settings.apiKey) {
-        const textsToFetch: string[] = [];
-        if (learningMode === 'miru') {
-          qs.slice(0, 2).forEach(q => textsToFetch.push(q.ttsText || q.word));
-        } else if (learningMode === 'kiku') {
-          qs.slice(0, 2).forEach(q => textsToFetch.push(`${q.ttsText || q.word}は どれかな？`));
-        } else if (learningMode === 'nakamawake' && theme) {
-          textsToFetch.push(`${theme.name}は どれ？`);
-        }
-        prefetchAudio(textsToFetch, settings.apiKey, settings.voiceName);
-      }
     });
   }, [currentChild, isLoading, themeId, learningMode, router]);
 

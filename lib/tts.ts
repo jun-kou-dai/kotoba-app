@@ -213,38 +213,3 @@ export async function speakText(
   await playBrowserTTS(text, speed);
 }
 
-/** 複数テキストのGemini音声をキャッシュに先読み（厳密に1件ずつ逐次実行） */
-export function prefetchAudio(texts: string[], apiKey: string | null, voiceName: string = 'Aoede'): void {
-  if (!apiKey || texts.length === 0) return;
-
-  // キャッシュ済みを除外
-  const uncached = texts.filter(t => !audioCache.has(`${voiceName}:${t}`));
-  if (uncached.length === 0) return;
-
-  let i = 0;
-  const fetchNext = () => {
-    if (i >= uncached.length) return;
-    const text = uncached[i++];
-
-    callGeminiTTS(text, apiKey, voiceName)
-      .then(result => {
-        const blob = ttsResultToBlob(result);
-        if (audioCache.size >= MAX_CACHE_SIZE) {
-          const firstKey = audioCache.keys().next().value;
-          if (firstKey) audioCache.delete(firstKey);
-        }
-        audioCache.set(`${voiceName}:${text}`, blob);
-        console.log(`📦 先読み完了: "${text.substring(0, 20)}..."`);
-      })
-      .catch(e => {
-        console.warn(`⚠️ 先読み失敗: "${text.substring(0, 20)}..."`, e.message);
-      })
-      .finally(() => {
-        // 429回避: 次のリクエストまで2秒待つ
-        setTimeout(fetchNext, 2000);
-      });
-  };
-
-  // 1件ずつ逐次実行（並列なし）
-  fetchNext();
-}
