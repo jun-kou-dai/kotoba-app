@@ -18,7 +18,7 @@ async function geminiRequest(model: string, action: string, body: object, apiKey
     const msg = errBody.error?.message || `HTTP ${res.status}`;
     if (res.status === 401 || res.status === 403) throw new Error('APIキーが無効です。');
     if (res.status === 404) throw new Error(`モデル "${model}" が見つかりません。`);
-    if (res.status === 429) throw new Error('API制限に達しました。しばらく待ってください。');
+    if (res.status === 429) throw new Error(`API_429: ${msg}`);
     if (res.status >= 500) throw new Error('Googleサーバーエラーです。');
     throw new Error(`APIエラー: ${msg}`);
   }
@@ -76,7 +76,7 @@ export async function callGeminiTTS(text: string, apiKey: string, voiceName: str
     : TTS_MODELS;
 
   for (const model of models) {
-    for (let retry = 0; retry < 3; retry++) {
+    for (let retry = 0; retry < 2; retry++) {
       try {
         const data = await geminiRequest(model, 'generateContent', ttsBody, apiKey);
         const candidates = data.candidates as Array<{ content?: { parts?: Array<{ inlineData?: { data: string; mimeType: string } }> } }> | undefined;
@@ -91,18 +91,19 @@ export async function callGeminiTTS(text: string, apiKey: string, voiceName: str
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.includes('ネットワーク') || msg.includes('APIキーが無効')) throw e;
-        if (msg.includes('limit: 0') || (msg.includes('quota') && msg.includes('exceeded'))) {
+        // 日次クォータ枯渇: "quota exceeded" or "Quota exceeded" in raw API message
+        if (msg.includes('API_429') && (msg.toLowerCase().includes('quota') || msg.includes('per_day') || msg.includes('per_model_per_day'))) {
           ttsQuotaExhausted = true;
+          console.warn('🔇 TTS日次クォータ枯渇 → 以降ブラウザTTSに切替');
           throw new Error('TTS_QUOTA_EXHAUSTED');
         }
-        // 429: 15秒→30秒リトライ（nano-storybook方式）
-        if ((msg.includes('429') || msg.includes('rate') || msg.includes('制限')) && retry < 2) {
-          const wait = (retry + 1) * 15_000;
-          console.log(`⏳ TTS レート制限、${wait / 1000}秒待機... (${model}, retry ${retry + 1})`);
-          await new Promise(r => setTimeout(r, wait));
+        // 一時的レート制限: 15秒リトライ1回だけ
+        if (msg.includes('API_429') && retry < 1) {
+          console.log(`⏳ TTS レート制限、15秒待機... (${model})`);
+          await new Promise(r => setTimeout(r, 15_000));
           continue;
         }
-        break; // その他のエラー → 次のモデルへ
+        break; // その他のエラー or リトライ上限 → 次のモデルへ
       }
     }
   }
