@@ -53,38 +53,15 @@ const TTS_MODELS = [
   'gemini-2.5-pro-preview-tts',
 ];
 let workingTTSModel: string | null = null;
-const QUOTA_RESET_MS = 60 * 60 * 1000; // 1時間後に自動リセット
-const QUOTA_LS_KEY = 'kotoba_tts_quota_exhausted_at';
-
-/** localStorage永続化: ページ遷移しても枯渇状態を保持 */
-function getQuotaExhaustedAt(): number {
-  if (typeof window === 'undefined') return 0;
-  const v = localStorage.getItem(QUOTA_LS_KEY);
-  return v ? parseInt(v, 10) : 0;
-}
-function setQuotaExhaustedAt(ts: number): void {
-  if (typeof window === 'undefined') return;
-  if (ts === 0) {
-    localStorage.removeItem(QUOTA_LS_KEY);
-  } else {
-    localStorage.setItem(QUOTA_LS_KEY, String(ts));
-  }
-}
+// nano-storybook方式: クォータ枯渇フラグはメモリのみ（ページリロードでリセット）
+let ttsQuotaExhausted = false;
 
 export function isTTSQuotaExhausted(): boolean {
-  const exhaustedAt = getQuotaExhaustedAt();
-  if (exhaustedAt === 0) return false;
-  // 1時間経過で自動リセット
-  if (Date.now() - exhaustedAt > QUOTA_RESET_MS) {
-    setQuotaExhaustedAt(0);
-    workingTTSModel = null;
-    return false;
-  }
-  return true;
+  return ttsQuotaExhausted;
 }
 
 export function resetTTSQuota(): void {
-  setQuotaExhaustedAt(0);
+  ttsQuotaExhausted = false;
   workingTTSModel = null;
 }
 
@@ -150,9 +127,9 @@ export async function callGeminiTTS(text: string, apiKey: string, voiceName: str
     }
   }
 
-  // 全モデルがクォータ枯渇ならフラグを立てる（localStorage永続化）
+  // 全モデルがクォータ枯渇ならフラグを立てる（メモリのみ、リロードでリセット）
   if (quotaExhaustedCount >= models.length) {
-    setQuotaExhaustedAt(Date.now());
+    ttsQuotaExhausted = true;
     throw new Error('TTS_QUOTA_EXHAUSTED');
   }
   throw new Error('TTS応答にオーディオデータがありません');

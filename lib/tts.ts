@@ -3,6 +3,11 @@
 import { callGeminiTTS, ttsResultToBlob, isTTSQuotaExhausted } from './gemini';
 import { getAudioCache, saveAudioCache } from './db';
 
+// 旧バージョンのlocalStorageフラグをクリーンアップ
+if (typeof window !== 'undefined') {
+  localStorage.removeItem('kotoba_tts_quota_exhausted_at');
+}
+
 // iOS Safari対策: Audioオブジェクトを1つだけ作成し使い回す
 let persistentAudio: HTMLAudioElement | null = null;
 let currentAudioUrl: string | null = null;
