@@ -1,6 +1,6 @@
 // TTS統合 (Gemini TTS + Web Speech API フォールバック)
 // nano-storybook と同じアプローチ: Gemini優先、失敗時ブラウザTTSフォールバック
-import { callGeminiTTS, ttsResultToBlob } from './gemini';
+import { callGeminiTTS, ttsResultToBlob, isTTSQuotaExhausted } from './gemini';
 import { getAudioCache, saveAudioCache } from './db';
 
 // iOS Safari対策: Audioオブジェクトを1つだけ作成し使い回す
@@ -101,6 +101,10 @@ async function playGeminiAudio(text: string, apiKey: string, voiceName: string, 
     console.log(`📦 メモリキャッシュから再生: "${text.substring(0, 20)}..."`);
   }
   if (!blob) {
+    // キャッシュミス＋クォータ枯渇 → API呼び出しせず即フォールバック
+    if (isTTSQuotaExhausted()) {
+      throw new Error('TTS_QUOTA_EXHAUSTED');
+    }
     console.log(`🔊 Gemini TTS取得中: "${text.substring(0, 20)}..."`);
     const result = await callGeminiTTS(text, apiKey, voiceName);
     if (speechCancelId !== myId) return;
@@ -210,8 +214,11 @@ export async function speakText(
       return;
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
-      console.warn('Gemini TTS error, ブラウザTTSにフォールバック:', msg);
       if (msg.includes('APIキーが無効')) throw e;
+      // クォータ枯渇は静かにフォールバック（毎回warnを出さない）
+      if (!msg.includes('TTS_QUOTA_EXHAUSTED')) {
+        console.warn('Gemini TTS error, ブラウザTTSにフォールバック:', msg);
+      }
       // フォールバックへ
     }
   }

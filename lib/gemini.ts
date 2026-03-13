@@ -54,9 +54,23 @@ const TTS_MODELS = [
 ];
 let workingTTSModel: string | null = null;
 let ttsQuotaExhausted = false;
+let ttsQuotaExhaustedAt = 0; // 枯渇タイムスタンプ（自動リセット用）
+const QUOTA_RESET_MS = 60 * 60 * 1000; // 1時間後に自動リセット
+
+export function isTTSQuotaExhausted(): boolean {
+  if (!ttsQuotaExhausted) return false;
+  // 1時間経過で自動リセット（日次クォータ回復を想定）
+  if (Date.now() - ttsQuotaExhaustedAt > QUOTA_RESET_MS) {
+    ttsQuotaExhausted = false;
+    workingTTSModel = null;
+    return false;
+  }
+  return true;
+}
 
 export function resetTTSQuota(): void {
   ttsQuotaExhausted = false;
+  ttsQuotaExhaustedAt = 0;
   workingTTSModel = null;
 }
 
@@ -66,7 +80,7 @@ interface TTSResult {
 }
 
 export async function callGeminiTTS(text: string, apiKey: string, voiceName: string = 'Aoede'): Promise<TTSResult> {
-  if (ttsQuotaExhausted) {
+  if (isTTSQuotaExhausted()) {
     throw new Error('TTS_QUOTA_EXHAUSTED');
   }
 
@@ -131,6 +145,7 @@ export async function callGeminiTTS(text: string, apiKey: string, voiceName: str
   // 全モデルがクォータ枯渇ならフラグを立てる
   if (quotaExhaustedCount >= models.length) {
     ttsQuotaExhausted = true;
+    ttsQuotaExhaustedAt = Date.now();
     throw new Error('TTS_QUOTA_EXHAUSTED');
   }
   throw new Error('TTS応答にオーディオデータがありません');
