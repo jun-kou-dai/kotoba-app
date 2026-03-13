@@ -206,20 +206,13 @@ export async function speakText(
 
   // Gemini TTS優先（nano-storybookと同じ）
   if (apiKey) {
-    const cacheKey = `${voiceName}:${text}`;
-    // 高速パス: クォータ枯渇中 && メモリキャッシュなし → async処理を経由せず即ブラウザTTS
-    // （iOS等でasync後にspeechSynthesis.speak()がブロックされる問題を回避）
-    if (isTTSQuotaExhausted() && !blobCache.has(cacheKey)) {
-      // Geminiスキップ、直接ブラウザTTSへ
-    } else {
-      try {
-        await playGeminiAudio(text, apiKey, voiceName, speed);
-        return;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : '';
-        if (msg.includes('APIキーが無効')) throw e;
-        // 静かにブラウザTTSへフォールバック
-      }
+    try {
+      await playGeminiAudio(text, apiKey, voiceName, speed);
+      return;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
+      if (msg.includes('APIキーが無効')) throw e;
+      // クォータ枯渇・その他エラー → ブラウザTTSへフォールバック
     }
   }
   await playBrowserTTS(text, speed);

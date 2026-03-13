@@ -53,7 +53,7 @@ const TTS_MODELS = [
   'gemini-2.5-pro-preview-tts',
 ];
 let workingTTSModel: string | null = null;
-const QUOTA_RESET_MS = 24 * 60 * 60 * 1000; // 24時間後に自動リセット（日次クォータに合わせる）
+const QUOTA_RESET_MS = 60 * 60 * 1000; // 1時間後に自動リセット
 const QUOTA_LS_KEY = 'kotoba_tts_quota_exhausted_at';
 
 /** localStorage永続化: ページ遷移しても枯渇状態を保持 */
@@ -74,7 +74,7 @@ function setQuotaExhaustedAt(ts: number): void {
 export function isTTSQuotaExhausted(): boolean {
   const exhaustedAt = getQuotaExhaustedAt();
   if (exhaustedAt === 0) return false;
-  // 24時間経過で自動リセット（日次クォータ回復を想定）
+  // 1時間経過で自動リセット
   if (Date.now() - exhaustedAt > QUOTA_RESET_MS) {
     setQuotaExhaustedAt(0);
     workingTTSModel = null;
