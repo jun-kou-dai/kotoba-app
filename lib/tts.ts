@@ -195,6 +195,11 @@ export async function speakText(
   voiceName: string = 'Aoede',
   speed: number = 0.85,
 ): Promise<void> {
+  // ユーザー操作前は音声再生を試みない（AudioContext警告防止）
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const activation = typeof navigator !== 'undefined' ? (navigator as any).userActivation : undefined;
+  if (activation && !activation.hasBeenActive) return;
+
   // 初回呼び出し時に日本語音声をロード（ページ読み込み時ではなくユーザー操作時）
   if (!voicesLoaded) preloadVoices();
   stopSpeaking();

@@ -5,8 +5,12 @@ type SoundType = 'correct' | 'wrong' | 'complete' | 'tap';
 
 let audioCtx: AudioContext | null = null;
 
-function getAudioContext(): AudioContext {
+function getAudioContext(): AudioContext | null {
   if (!audioCtx || audioCtx.state === 'closed') {
+    // ユーザー操作前のAudioContext作成を防止（Chrome「AudioContext was not allowed to start」警告回避）
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const activation = (navigator as any).userActivation;
+    if (activation && !activation.hasBeenActive) return null;
     audioCtx = new AudioContext();
   }
   // iOSではユーザーインタラクション後にresumeが必要
@@ -106,6 +110,7 @@ export function playSound(type: SoundType): void {
   if (typeof window === 'undefined') return;
   try {
     const ctx = getAudioContext();
+    if (!ctx) return;
     switch (type) {
       case 'correct':
         playCorrectSound(ctx);
