@@ -272,8 +272,8 @@ export function precacheAudio(
       }
 
       if (controller.signal.aborted) return;
-      // レート制限回避: 6秒間隔（10RPM以内に維持）
-      await new Promise(r => setTimeout(r, 6_000));
+      // レート制限回避: 3秒間隔（429 RATE時は自動15秒待機で自己調整）
+      await new Promise(r => setTimeout(r, 3_000));
     }
   })();
 }

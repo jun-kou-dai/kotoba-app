@@ -90,7 +90,7 @@ export async function callGeminiTTS(text: string, apiKey: string, voiceName: str
   let quotaExhaustedCount = 0;
 
   for (const model of models) {
-    for (let retry = 0; retry < 3; retry++) {
+    for (let retry = 0; retry < 2; retry++) {
       try {
         const data = await geminiRequest(model, 'generateContent', ttsBody, apiKey);
         const candidates = data.candidates as Array<{ content?: { parts?: Array<{ inlineData?: { data: string; mimeType: string } }> } }> | undefined;
@@ -101,13 +101,12 @@ export async function callGeminiTTS(text: string, apiKey: string, voiceName: str
             return { data: part.inlineData.data, mimeType: part.inlineData.mimeType || 'audio/L16;rate=24000' };
           }
         }
-        // 音声データなし（finishReason: OTHER）→ リトライ（短い単語で発生しやすい）
-        if (retry < 2) {
+        // 音声データなし（finishReason: OTHER）→ 即リトライ（ランダム失敗、待機不要）
+        if (retry < 1) {
           console.warn(`⚠️ ${model} 音声データなし（試行${retry + 1}）→ リトライ`);
-          await new Promise(r => setTimeout(r, 1_000));
           continue;
         }
-        console.warn(`⚠️ ${model} 音声データなし（3回失敗）→ 次のモデルへ`);
+        console.warn(`⚠️ ${model} 音声データなし（2回失敗）→ 次のモデルへ`);
         break;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
