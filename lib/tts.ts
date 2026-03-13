@@ -219,24 +219,80 @@ export async function speakText(
 }
 
 /**
- * IndexedDBキャッシュをメモリにウォームアップ（API呼び出しなし）。
- * ページ表示時にバックグラウンドで実行し、キャッシュ済み音声を即再生可能にする。
- * 未キャッシュの音声はspeakText時にオンデマンドでAPI取得する。
- * API呼び出しをここで行わないことで、429エラーがコンソールに表示されるのを防止。
+ * バックグラウンドプリキャッシュ。
+ * 1. メモリキャッシュ → 2. IndexedDB → 3. API取得（クォータ枯渇時はスキップ）
  */
+const precacheQueue: { text: string; voiceName: string }[] = [];
+const precacheQueueKeys = new Set<string>();
+let precacheWorkerRunning = false;
+let precacheApiKey = '';
+
 export function precacheAudio(
   words: { text: string; voiceName: string }[],
-  _apiKey: string,
+  apiKey: string,
 ): void {
+  precacheApiKey = apiKey;
+
+  const newItems: { text: string; voiceName: string }[] = [];
   for (const item of words) {
     const cacheKey = `${item.voiceName}:${item.text}`;
     if (blobCache.has(cacheKey)) continue;
-    // IndexedDBからメモリキャッシュにウォームアップ（非同期、エラー無視）
-    getAudioCache(cacheKey).then(cached => {
-      if (cached && !blobCache.has(cacheKey)) {
-        blobCache.set(cacheKey, ttsResultToBlob({ data: cached.data, mimeType: cached.mimeType }));
-      }
-    }).catch(() => {});
+    if (precacheQueueKeys.has(cacheKey)) continue;
+    newItems.push(item);
+    precacheQueueKeys.add(cacheKey);
   }
+
+  if (newItems.length > 0) {
+    precacheQueue.unshift(...newItems);
+  }
+
+  if (!precacheWorkerRunning && precacheQueue.length > 0) {
+    precacheWorkerRunning = true;
+    processPrecacheQueue();
+  }
+}
+
+async function processPrecacheQueue(): Promise<void> {
+  while (precacheQueue.length > 0) {
+    const item = precacheQueue.shift()!;
+    const cacheKey = `${item.voiceName}:${item.text}`;
+    precacheQueueKeys.delete(cacheKey);
+
+    if (blobCache.has(cacheKey)) continue;
+
+    // IndexedDBチェック
+    try {
+      const cached = await getAudioCache(cacheKey);
+      if (cached) {
+        blobCache.set(cacheKey, ttsResultToBlob({ data: cached.data, mimeType: cached.mimeType }));
+        continue;
+      }
+    } catch { /* ignore */ }
+
+    // クォータ枯渇中はAPI呼び出しをスキップ（429コンソールエラー防止）
+    if (isTTSQuotaExhausted()) {
+      precacheQueue.length = 0;
+      precacheQueueKeys.clear();
+      break;
+    }
+
+    // API取得
+    try {
+      const result = await callGeminiTTS(item.text, precacheApiKey, item.voiceName);
+      blobCache.set(cacheKey, ttsResultToBlob(result));
+      saveAudioCache({ key: cacheKey, data: result.data, mimeType: result.mimeType, createdAt: Date.now() }).catch(() => {});
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
+      if (msg.includes('TTS_QUOTA_EXHAUSTED')) {
+        precacheQueue.length = 0;
+        precacheQueueKeys.clear();
+        break;
+      }
+    }
+
+    // レート制限回避
+    await new Promise(r => setTimeout(r, 3_000));
+  }
+  precacheWorkerRunning = false;
 }
 
