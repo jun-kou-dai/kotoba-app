@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { VocabularyItem } from '../../types/vocabulary';
 import { SessionAnswer } from '../../types/learning';
 import SpeakButton from '../SpeakButton';
-import { speakText } from '../../lib/tts';
+import { speakText, precacheAudio } from '../../lib/tts';
 import { useApp } from '../../contexts/AppContext';
 
 interface MiruModeProps {
@@ -19,7 +19,17 @@ export default function MiruMode({ questions, onComplete }: MiruModeProps) {
 
   const current = questions[index];
 
-  // 自動音声再生 (ブラウザTTSで即座に + 裏でGemini先読み)
+  // 学習開始時に全単語の音声をバックグラウンドでプリキャッシュ
+  useEffect(() => {
+    if (settings.voiceEnabled && settings.apiKey && questions.length > 0) {
+      precacheAudio(
+        questions.map(q => ({ text: q.ttsText || q.word, voiceName: settings.voiceName })),
+        settings.apiKey,
+      );
+    }
+  }, [questions, settings.voiceEnabled, settings.apiKey, settings.voiceName]);
+
+  // カード切替時の自動音声再生
   useEffect(() => {
     if (settings.voiceEnabled && current) {
       speakText(current.ttsText || current.word, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});

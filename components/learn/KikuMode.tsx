@@ -4,7 +4,7 @@ import { VocabularyItem } from '../../types/vocabulary';
 import { SessionAnswer } from '../../types/learning';
 import { generateDistractors } from '../../lib/learning-engine';
 import FeedbackOverlay from '../FeedbackOverlay';
-import { speakText } from '../../lib/tts';
+import { speakText, precacheAudio } from '../../lib/tts';
 import { useApp } from '../../contexts/AppContext';
 
 interface KikuModeProps {
@@ -30,6 +30,16 @@ export default function KikuMode({ questions, onComplete }: KikuModeProps) {
   const [answers, setAnswers] = useState<SessionAnswer[]>([]);
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null);
   const [questionStartTime, setQuestionStartTime] = useState(Date.now());
+
+  // 学習開始時に全単語の音声をバックグラウンドでプリキャッシュ
+  useEffect(() => {
+    if (settings.voiceEnabled && settings.apiKey && questions.length > 0) {
+      precacheAudio(
+        questions.map(q => ({ text: q.ttsText || q.word, voiceName: settings.voiceName })),
+        settings.apiKey,
+      );
+    }
+  }, [questions, settings.voiceEnabled, settings.apiKey, settings.voiceName]);
 
   // 音声再生
   useEffect(() => {

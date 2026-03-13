@@ -218,3 +218,63 @@ export async function speakText(
   await playBrowserTTS(text, speed);
 }
 
+/**
+ * バックグラウンドで単語リストの音声をプリキャッシュする。
+ * キャッシュ済みの単語はスキップし、未キャッシュのみAPI呼び出し。
+ * レート制限回避のため6秒間隔で逐次実行（10RPM以内）。
+ */
+let precacheAbortController: AbortController | null = null;
+
+export function precacheAudio(
+  words: { text: string; voiceName: string }[],
+  apiKey: string,
+): void {
+  // 前回のプリキャッシュを中止
+  if (precacheAbortController) {
+    precacheAbortController.abort();
+  }
+  const controller = new AbortController();
+  precacheAbortController = controller;
+
+  (async () => {
+    for (const { text, voiceName } of words) {
+      if (controller.signal.aborted) return;
+      const cacheKey = `${voiceName}:${text}`;
+
+      // メモリキャッシュにあればスキップ
+      if (blobCache.has(cacheKey)) continue;
+
+      // IndexedDBキャッシュにあればメモリに読み込んでスキップ
+      try {
+        const cached = await getAudioCache(cacheKey);
+        if (cached) {
+          blobCache.set(cacheKey, ttsResultToBlob({ data: cached.data, mimeType: cached.mimeType }));
+          continue;
+        }
+      } catch { /* ignore */ }
+
+      if (controller.signal.aborted) return;
+
+      // APIからTTS取得 → キャッシュ保存
+      try {
+        const result = await callGeminiTTS(text, apiKey, voiceName);
+        if (controller.signal.aborted) return;
+        blobCache.set(cacheKey, ttsResultToBlob(result));
+        saveAudioCache({ key: cacheKey, data: result.data, mimeType: result.mimeType, createdAt: Date.now() }).catch(() => {});
+        console.log(`🔄 プリキャッシュ完了: "${text}"`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : '';
+        if (msg.includes('TTS_QUOTA_EXHAUSTED')) {
+          console.warn('🔄 プリキャッシュ中止: クォータ枯渇');
+          return;
+        }
+        console.warn(`🔄 プリキャッシュ失敗: "${text}" - ${msg}`);
+      }
+
+      if (controller.signal.aborted) return;
+      // レート制限回避: 6秒間隔（10RPM以内に維持）
+      await new Promise(r => setTimeout(r, 6_000));
+    }
+  })();
+}
+
