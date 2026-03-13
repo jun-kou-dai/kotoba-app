@@ -11,7 +11,7 @@ import BackButton from '../../../components/ui/BackButton';
 import VocabCard from '../../../components/VocabCard';
 import BigButton from '../../../components/ui/BigButton';
 import ProgressBar from '../../../components/ui/ProgressBar';
-import { speakText } from '../../../lib/tts';
+import { speakText, precacheAudio } from '../../../lib/tts';
 
 const MODES: { id: LearningMode; emoji: string; name: string; desc: string }[] = [
   { id: 'miru', emoji: '👀', name: 'みる', desc: 'カードを みてみよう' },
@@ -34,6 +34,22 @@ export default function ThemeDetailClient({ themeId }: { themeId: string }) {
     getMasteryByChild(currentChild.id).then(setMasteries);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentChild, isLoading, router, themeId]);
+
+  // テーマ詳細ページ表示時に全単語＋フレーズをプリキャッシュ
+  // 学習モードに入る前にキャッシュを準備しておく
+  useEffect(() => {
+    if (!settings.voiceEnabled || !settings.apiKey || vocabItems.length === 0) return;
+    const items: { text: string; voiceName: string }[] = [];
+    // みるモード用: 単語そのもの
+    for (const v of vocabItems) {
+      items.push({ text: v.ttsText || v.word, voiceName: settings.voiceName });
+    }
+    // きくモード用: 「◯◯は どれかな？」フレーズ
+    for (const v of vocabItems) {
+      items.push({ text: `${v.ttsText || v.word}は どれかな？`, voiceName: settings.voiceName });
+    }
+    precacheAudio(items, settings.apiKey);
+  }, [vocabItems, settings.voiceEnabled, settings.apiKey, settings.voiceName]);
 
   if (!theme) return <div className="p-6 text-center">テーマが みつかりません</div>;
 
