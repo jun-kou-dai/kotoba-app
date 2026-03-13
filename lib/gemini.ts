@@ -74,7 +74,7 @@ function setQuotaExhaustedAt(ts: number): void {
 export function isTTSQuotaExhausted(): boolean {
   const exhaustedAt = getQuotaExhaustedAt();
   if (exhaustedAt === 0) return false;
-  // 1時間経過で自動リセット（日次クォータ回復を想定）
+  // 24時間経過で自動リセット（日次クォータ回復を想定）
   if (Date.now() - exhaustedAt > QUOTA_RESET_MS) {
     setQuotaExhaustedAt(0);
     workingTTSModel = null;
