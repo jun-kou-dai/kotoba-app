@@ -32,10 +32,11 @@ export default function KikuMode({ questions, onComplete }: KikuModeProps) {
   const [questionStartTime, setQuestionStartTime] = useState(Date.now());
 
   // 学習開始時に全単語の音声をバックグラウンドでプリキャッシュ
+  // きくモードは「◯◯は どれかな？」形式で再生するのでフレーズごとキャッシュ
   useEffect(() => {
     if (settings.voiceEnabled && settings.apiKey && questions.length > 0) {
       precacheAudio(
-        questions.map(q => ({ text: q.ttsText || q.word, voiceName: settings.voiceName })),
+        questions.map(q => ({ text: `${q.ttsText || q.word}は どれかな？`, voiceName: settings.voiceName })),
         settings.apiKey,
       );
     }

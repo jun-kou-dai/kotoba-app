@@ -6,7 +6,7 @@ import { generateNakamawakeChoices } from '../../lib/learning-engine';
 import { themes } from '../../data/themes';
 import FeedbackOverlay from '../FeedbackOverlay';
 import BigButton from '../ui/BigButton';
-import { speakText } from '../../lib/tts';
+import { speakText, precacheAudio } from '../../lib/tts';
 import { useApp } from '../../contexts/AppContext';
 
 interface NakamawakeModeProps {
@@ -42,6 +42,16 @@ export default function NakamawakeMode({ themeId, questionCount, onComplete }: N
   const [questionStartTime, setQuestionStartTime] = useState(Date.now());
 
   const theme = themes.find(t => t.id === quiz.targetThemeId)!;
+
+  // 全テーマのフレーズをプリキャッシュ（4テーマだけなのですぐ完了）
+  useEffect(() => {
+    if (settings.voiceEnabled && settings.apiKey) {
+      precacheAudio(
+        themes.map(t => ({ text: `${t.name}は どれ？`, voiceName: settings.voiceName })),
+        settings.apiKey,
+      );
+    }
+  }, [settings.voiceEnabled, settings.apiKey, settings.voiceName]);
 
   useEffect(() => {
     if (settings.voiceEnabled && theme) {
