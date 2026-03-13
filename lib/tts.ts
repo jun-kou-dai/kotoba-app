@@ -206,13 +206,20 @@ export async function speakText(
 
   // Gemini TTS優先（nano-storybookと同じ）
   if (apiKey) {
-    try {
-      await playGeminiAudio(text, apiKey, voiceName, speed);
-      return;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '';
-      if (msg.includes('APIキーが無効')) throw e;
-      // 静かにブラウザTTSへフォールバック
+    const cacheKey = `${voiceName}:${text}`;
+    // 高速パス: クォータ枯渇中 && メモリキャッシュなし → async処理を経由せず即ブラウザTTS
+    // （iOS等でasync後にspeechSynthesis.speak()がブロックされる問題を回避）
+    if (isTTSQuotaExhausted() && !blobCache.has(cacheKey)) {
+      // Geminiスキップ、直接ブラウザTTSへ
+    } else {
+      try {
+        await playGeminiAudio(text, apiKey, voiceName, speed);
+        return;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : '';
+        if (msg.includes('APIキーが無効')) throw e;
+        // 静かにブラウザTTSへフォールバック
+      }
     }
   }
   await playBrowserTTS(text, speed);
@@ -233,6 +240,13 @@ export function precacheAudio(
 ): void {
   precacheApiKey = apiKey;
 
+  // クォータ枯渇時: IndexedDB→メモリのウォームアップだけ行い、API呼び出しは一切しない
+  // （429コンソールエラーを完全防止）
+  if (isTTSQuotaExhausted()) {
+    warmBlobCacheFromDB(words);
+    return;
+  }
+
   const newItems: { text: string; voiceName: string }[] = [];
   for (const item of words) {
     const cacheKey = `${item.voiceName}:${item.text}`;
@@ -249,6 +263,20 @@ export function precacheAudio(
   if (!precacheWorkerRunning && precacheQueue.length > 0) {
     precacheWorkerRunning = true;
     processPrecacheQueue();
+  }
+}
+
+/** IndexedDB→メモリキャッシュのウォームアップ（API呼び出しなし） */
+async function warmBlobCacheFromDB(words: { text: string; voiceName: string }[]): Promise<void> {
+  for (const item of words) {
+    const cacheKey = `${item.voiceName}:${item.text}`;
+    if (blobCache.has(cacheKey)) continue;
+    try {
+      const cached = await getAudioCache(cacheKey);
+      if (cached) {
+        blobCache.set(cacheKey, ttsResultToBlob({ data: cached.data, mimeType: cached.mimeType }));
+      }
+    } catch { /* ignore */ }
   }
 }
 
