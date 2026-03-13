@@ -53,15 +53,30 @@ const TTS_MODELS = [
   'gemini-2.5-pro-preview-tts',
 ];
 let workingTTSModel: string | null = null;
-let ttsQuotaExhausted = false;
-let ttsQuotaExhaustedAt = 0; // 枯渇タイムスタンプ（自動リセット用）
 const QUOTA_RESET_MS = 60 * 60 * 1000; // 1時間後に自動リセット
+const QUOTA_LS_KEY = 'kotoba_tts_quota_exhausted_at';
+
+/** localStorage永続化: ページ遷移しても枯渇状態を保持 */
+function getQuotaExhaustedAt(): number {
+  if (typeof window === 'undefined') return 0;
+  const v = localStorage.getItem(QUOTA_LS_KEY);
+  return v ? parseInt(v, 10) : 0;
+}
+function setQuotaExhaustedAt(ts: number): void {
+  if (typeof window === 'undefined') return;
+  if (ts === 0) {
+    localStorage.removeItem(QUOTA_LS_KEY);
+  } else {
+    localStorage.setItem(QUOTA_LS_KEY, String(ts));
+  }
+}
 
 export function isTTSQuotaExhausted(): boolean {
-  if (!ttsQuotaExhausted) return false;
+  const exhaustedAt = getQuotaExhaustedAt();
+  if (exhaustedAt === 0) return false;
   // 1時間経過で自動リセット（日次クォータ回復を想定）
-  if (Date.now() - ttsQuotaExhaustedAt > QUOTA_RESET_MS) {
-    ttsQuotaExhausted = false;
+  if (Date.now() - exhaustedAt > QUOTA_RESET_MS) {
+    setQuotaExhaustedAt(0);
     workingTTSModel = null;
     return false;
   }
@@ -69,8 +84,7 @@ export function isTTSQuotaExhausted(): boolean {
 }
 
 export function resetTTSQuota(): void {
-  ttsQuotaExhausted = false;
-  ttsQuotaExhaustedAt = 0;
+  setQuotaExhaustedAt(0);
   workingTTSModel = null;
 }
 
@@ -116,24 +130,18 @@ export async function callGeminiTTS(text: string, apiKey: string, voiceName: str
           }
         }
         // 音声データなし（finishReason: OTHER）→ 即リトライ（ランダム失敗、待機不要）
-        if (retry < 1) {
-          console.warn(`⚠️ ${model} 音声データなし（試行${retry + 1}）→ リトライ`);
-          continue;
-        }
-        console.warn(`⚠️ ${model} 音声データなし（2回失敗）→ 次のモデルへ`);
+        if (retry < 1) continue;
         break;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.includes('ネットワーク') || msg.includes('APIキーが無効')) throw e;
-        // 日次クォータ枯渇: このモデルはスキップして次のモデルへ
+        // 日次クォータ枯渇: このモデルはスキップして次のモデルへ（静かに処理）
         if (msg === 'API_429_QUOTA') {
           quotaExhaustedCount++;
-          console.warn(`🔇 ${model} 日次クォータ枯渇 → 次のモデルへ`);
           break;
         }
         // 一時的レート制限: 15秒リトライ1回だけ
         if (msg === 'API_429_RATE' && retry < 1) {
-          console.log(`⏳ TTS レート制限、15秒待機... (${model})`);
           await new Promise(r => setTimeout(r, 15_000));
           continue;
         }
@@ -142,10 +150,9 @@ export async function callGeminiTTS(text: string, apiKey: string, voiceName: str
     }
   }
 
-  // 全モデルがクォータ枯渇ならフラグを立てる
+  // 全モデルがクォータ枯渇ならフラグを立てる（localStorage永続化）
   if (quotaExhaustedCount >= models.length) {
-    ttsQuotaExhausted = true;
-    ttsQuotaExhaustedAt = Date.now();
+    setQuotaExhaustedAt(Date.now());
     throw new Error('TTS_QUOTA_EXHAUSTED');
   }
   throw new Error('TTS応答にオーディオデータがありません');

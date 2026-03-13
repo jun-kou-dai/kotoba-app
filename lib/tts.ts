@@ -25,7 +25,7 @@ function getOrCreateAudio(): HTMLAudioElement {
 }
 
 export function initAudioContext(): void {
-  getOrCreateAudio();
+  // Audio要素はユーザー操作時に遅延作成（AudioContext警告を防止）
   preloadVoices();
 }
 
@@ -95,24 +95,19 @@ async function playGeminiAudio(text: string, apiKey: string, voiceName: string, 
     if (cached) {
       blob = ttsResultToBlob({ data: cached.data, mimeType: cached.mimeType });
       blobCache.set(cacheKey, blob);
-      console.log(`📦 IndexedDBキャッシュから再生: "${text.substring(0, 20)}..."`);
     }
-  } else {
-    console.log(`📦 メモリキャッシュから再生: "${text.substring(0, 20)}..."`);
   }
   if (!blob) {
     // キャッシュミス＋クォータ枯渇 → API呼び出しせず即フォールバック
     if (isTTSQuotaExhausted()) {
       throw new Error('TTS_QUOTA_EXHAUSTED');
     }
-    console.log(`🔊 Gemini TTS取得中: "${text.substring(0, 20)}..."`);
     const result = await callGeminiTTS(text, apiKey, voiceName);
     if (speechCancelId !== myId) return;
     blob = ttsResultToBlob(result);
     blobCache.set(cacheKey, blob);
     // IndexedDBに永続保存（バックグラウンド、エラーは無視）
     saveAudioCache({ key: cacheKey, data: result.data, mimeType: result.mimeType, createdAt: Date.now() }).catch(() => {});
-    console.log(`✅ Gemini TTS成功+キャッシュ保存: "${text.substring(0, 20)}..."`);
   }
   if (speechCancelId !== myId) return;
 
@@ -145,7 +140,6 @@ async function playGeminiAudio(text: string, apiKey: string, voiceName: string, 
         currentAudioUrl = null;
       }
       isSpeakingNow = false;
-      console.warn('Gemini音声再生エラー、ブラウザTTSにフォールバック');
       playBrowserTTS(text, speed).then(resolve);
     };
     audio.play().catch(() => {
@@ -154,7 +148,6 @@ async function playGeminiAudio(text: string, apiKey: string, voiceName: string, 
         currentAudioUrl = null;
       }
       isSpeakingNow = false;
-      console.warn('Gemini音声play()失敗、ブラウザTTSにフォールバック');
       playBrowserTTS(text, speed).then(resolve);
     });
   });
@@ -215,11 +208,7 @@ export async function speakText(
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
       if (msg.includes('APIキーが無効')) throw e;
-      // クォータ枯渇は静かにフォールバック（毎回warnを出さない）
-      if (!msg.includes('TTS_QUOTA_EXHAUSTED')) {
-        console.warn('Gemini TTS error, ブラウザTTSにフォールバック:', msg);
-      }
-      // フォールバックへ
+      // 静かにブラウザTTSへフォールバック
     }
   }
   await playBrowserTTS(text, speed);
@@ -241,6 +230,9 @@ export function precacheAudio(
   words: { text: string; voiceName: string }[],
   apiKey: string,
 ): void {
+  // クォータ枯渇中はAPI呼び出しを完全に回避
+  if (isTTSQuotaExhausted()) return;
+
   precacheApiKey = apiKey;
 
   // キャッシュ済み・キュー内重複を除外し、新規アイテムのみ収集
@@ -283,21 +275,26 @@ async function processPrecacheQueue(): Promise<void> {
       }
     } catch { /* ignore */ }
 
+    // クォータ枯渇チェック（ループ中に枯渇した場合も即停止）
+    if (isTTSQuotaExhausted()) {
+      precacheQueue.length = 0;
+      precacheQueueKeys.clear();
+      break;
+    }
+
     // API取得 → キャッシュ保存
     try {
       const result = await callGeminiTTS(item.text, precacheApiKey, item.voiceName);
       blobCache.set(cacheKey, ttsResultToBlob(result));
       saveAudioCache({ key: cacheKey, data: result.data, mimeType: result.mimeType, createdAt: Date.now() }).catch(() => {});
-      console.log(`🔄 プリキャッシュ完了: "${item.text}"`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
       if (msg.includes('TTS_QUOTA_EXHAUSTED')) {
         precacheQueue.length = 0;
         precacheQueueKeys.clear();
-        console.warn('🔄 プリキャッシュ中止: クォータ枯渇');
         break;
       }
-      console.warn(`🔄 プリキャッシュ失敗: "${item.text}" - ${msg}`);
+      // その他のエラーは静かにスキップ
     }
 
     // レート制限回避: API呼び出し後のみ3秒待機
