@@ -24,13 +24,7 @@ function getOrCreateAudio(): HTMLAudioElement {
   return persistentAudio;
 }
 
-export function initAudioContext(): void {
-  // 音声リストのみプリロード（AudioContextやAudio要素はユーザー操作時に遅延作成）
-  // setTimeout で次フレームに遅延し、レンダリングブロックを回避
-  if (typeof window !== 'undefined') {
-    setTimeout(preloadVoices, 100);
-  }
-}
+// preloadVoicesは初回speakText呼び出し時に自動実行（ページ読み込み時の音声API呼び出しをゼロにする）
 
 export function isSpeaking(): boolean {
   return isSpeakingNow;
@@ -201,6 +195,8 @@ export async function speakText(
   voiceName: string = 'Aoede',
   speed: number = 0.85,
 ): Promise<void> {
+  // 初回呼び出し時に日本語音声をロード（ページ読み込み時ではなくユーザー操作時）
+  if (!voicesLoaded) preloadVoices();
   stopSpeaking();
 
   // Gemini TTS優先（nano-storybookと同じ）

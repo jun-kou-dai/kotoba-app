@@ -8,7 +8,6 @@ import { themes } from '../../data/themes';
 import { vocabulary } from '../../data/vocabulary';
 import { ThemeId } from '../../types/vocabulary';
 import ThemeCard from '../../components/ThemeCard';
-import { initAudioContext } from '../../lib/tts';
 
 export default function HomePage() {
   const router = useRouter();
@@ -21,8 +20,6 @@ export default function HomePage() {
     if (!currentChild) { router.replace('/'); return; }
     getMasteryByChild(currentChild.id).then(setMasteries);
     getDailyRecords(currentChild.id).then(records => setStreak(getStreak(records)));
-    // TTS音声リストのみプリロード（AudioContextはユーザー操作時に遅延作成）
-    initAudioContext();
   }, [currentChild, isLoading, router]);
 
   const themeMasteryMap = useMemo(() => {
