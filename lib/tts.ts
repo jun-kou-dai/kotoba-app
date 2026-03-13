@@ -219,62 +219,83 @@ export async function speakText(
 }
 
 /**
- * バックグラウンドで単語リストの音声をプリキャッシュする。
- * キャッシュ済みの単語はスキップし、未キャッシュのみAPI呼び出し。
- * レート制限回避のため6秒間隔で逐次実行（10RPM以内）。
+ * キュー方式バックグラウンドプリキャッシュ。
+ * - 新しいprecacheAudio呼び出しはキューの先頭に優先挿入（最新リクエスト優先）
+ * - 既にキャッシュ済み or キュー内の重複はスキップ
+ * - ワーカーは中断されず、キューが空になるまで逐次処理
+ * - レート制限はAPI呼び出し後のみ3秒待機（キャッシュヒットは即スキップ）
  */
-let precacheAbortController: AbortController | null = null;
+const precacheQueue: { text: string; voiceName: string }[] = [];
+const precacheQueueKeys = new Set<string>();
+let precacheWorkerRunning = false;
+let precacheApiKey = '';
 
 export function precacheAudio(
   words: { text: string; voiceName: string }[],
   apiKey: string,
 ): void {
-  // 前回のプリキャッシュを中止
-  if (precacheAbortController) {
-    precacheAbortController.abort();
+  precacheApiKey = apiKey;
+
+  // キャッシュ済み・キュー内重複を除外し、新規アイテムのみ収集
+  const newItems: { text: string; voiceName: string }[] = [];
+  for (const item of words) {
+    const cacheKey = `${item.voiceName}:${item.text}`;
+    if (blobCache.has(cacheKey)) continue;
+    if (precacheQueueKeys.has(cacheKey)) continue;
+    newItems.push(item);
+    precacheQueueKeys.add(cacheKey);
   }
-  const controller = new AbortController();
-  precacheAbortController = controller;
 
-  (async () => {
-    for (const { text, voiceName } of words) {
-      if (controller.signal.aborted) return;
-      const cacheKey = `${voiceName}:${text}`;
+  // 先頭に挿入（最新リクエストが最優先）
+  if (newItems.length > 0) {
+    precacheQueue.unshift(...newItems);
+  }
 
-      // メモリキャッシュにあればスキップ
-      if (blobCache.has(cacheKey)) continue;
+  // ワーカー起動（未稼働時のみ）
+  if (!precacheWorkerRunning && precacheQueue.length > 0) {
+    precacheWorkerRunning = true;
+    processPrecacheQueue();
+  }
+}
 
-      // IndexedDBキャッシュにあればメモリに読み込んでスキップ
-      try {
-        const cached = await getAudioCache(cacheKey);
-        if (cached) {
-          blobCache.set(cacheKey, ttsResultToBlob({ data: cached.data, mimeType: cached.mimeType }));
-          continue;
-        }
-      } catch { /* ignore */ }
+async function processPrecacheQueue(): Promise<void> {
+  while (precacheQueue.length > 0) {
+    const item = precacheQueue.shift()!;
+    const cacheKey = `${item.voiceName}:${item.text}`;
+    precacheQueueKeys.delete(cacheKey);
 
-      if (controller.signal.aborted) return;
+    // オンデマンド取得等で既にキャッシュされていればスキップ
+    if (blobCache.has(cacheKey)) continue;
 
-      // APIからTTS取得 → キャッシュ保存
-      try {
-        const result = await callGeminiTTS(text, apiKey, voiceName);
-        if (controller.signal.aborted) return;
-        blobCache.set(cacheKey, ttsResultToBlob(result));
-        saveAudioCache({ key: cacheKey, data: result.data, mimeType: result.mimeType, createdAt: Date.now() }).catch(() => {});
-        console.log(`🔄 プリキャッシュ完了: "${text}"`);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : '';
-        if (msg.includes('TTS_QUOTA_EXHAUSTED')) {
-          console.warn('🔄 プリキャッシュ中止: クォータ枯渇');
-          return;
-        }
-        console.warn(`🔄 プリキャッシュ失敗: "${text}" - ${msg}`);
+    // IndexedDBチェック（キャッシュヒットなら即メモリに読み込み、待機なし）
+    try {
+      const cached = await getAudioCache(cacheKey);
+      if (cached) {
+        blobCache.set(cacheKey, ttsResultToBlob({ data: cached.data, mimeType: cached.mimeType }));
+        continue;
       }
+    } catch { /* ignore */ }
 
-      if (controller.signal.aborted) return;
-      // レート制限回避: 3秒間隔（429 RATE時は自動15秒待機で自己調整）
-      await new Promise(r => setTimeout(r, 3_000));
+    // API取得 → キャッシュ保存
+    try {
+      const result = await callGeminiTTS(item.text, precacheApiKey, item.voiceName);
+      blobCache.set(cacheKey, ttsResultToBlob(result));
+      saveAudioCache({ key: cacheKey, data: result.data, mimeType: result.mimeType, createdAt: Date.now() }).catch(() => {});
+      console.log(`🔄 プリキャッシュ完了: "${item.text}"`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
+      if (msg.includes('TTS_QUOTA_EXHAUSTED')) {
+        precacheQueue.length = 0;
+        precacheQueueKeys.clear();
+        console.warn('🔄 プリキャッシュ中止: クォータ枯渇');
+        break;
+      }
+      console.warn(`🔄 プリキャッシュ失敗: "${item.text}" - ${msg}`);
     }
-  })();
+
+    // レート制限回避: API呼び出し後のみ3秒待機
+    await new Promise(r => setTimeout(r, 3_000));
+  }
+  precacheWorkerRunning = false;
 }
 
