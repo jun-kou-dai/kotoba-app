@@ -25,8 +25,11 @@ function getOrCreateAudio(): HTMLAudioElement {
 }
 
 export function initAudioContext(): void {
-  // Audio要素はユーザー操作時に遅延作成（AudioContext警告を防止）
-  preloadVoices();
+  // 音声リストのみプリロード（AudioContextやAudio要素はユーザー操作時に遅延作成）
+  // setTimeout で次フレームに遅延し、レンダリングブロックを回避
+  if (typeof window !== 'undefined') {
+    setTimeout(preloadVoices, 100);
+  }
 }
 
 export function isSpeaking(): boolean {

@@ -9,7 +9,6 @@ import { vocabulary } from '../../data/vocabulary';
 import { ThemeId } from '../../types/vocabulary';
 import ThemeCard from '../../components/ThemeCard';
 import { initAudioContext } from '../../lib/tts';
-import { preloadSounds, initAudioForInteraction } from '../../lib/audio';
 
 export default function HomePage() {
   const router = useRouter();
@@ -22,10 +21,8 @@ export default function HomePage() {
     if (!currentChild) { router.replace('/'); return; }
     getMasteryByChild(currentChild.id).then(setMasteries);
     getDailyRecords(currentChild.id).then(records => setStreak(getStreak(records)));
-    // iOS Safari対策: TTS用Audio + 効果音用AudioContext初期化
+    // TTS音声リストのみプリロード（AudioContextはユーザー操作時に遅延作成）
     initAudioContext();
-    initAudioForInteraction();
-    preloadSounds();
   }, [currentChild, isLoading, router]);
 
   const themeMasteryMap = useMemo(() => {

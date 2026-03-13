@@ -16,28 +16,8 @@ function getAudioContext(): AudioContext {
   return audioCtx;
 }
 
-/** ユーザーインタラクション時に呼んでAudioContextを有効化 */
-export function initAudioForInteraction(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const ctx = getAudioContext();
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
-  } catch {
-    // 無視
-  }
-}
-
-/** 効果音のプリロード（AudioContext初期化） */
-export function preloadSounds(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    getAudioContext();
-  } catch {
-    // 無視
-  }
-}
+// AudioContextはplaySound()初回呼び出し時に自動作成される（遅延初期化）
+// preloadSoundsとinitAudioForInteractionは不要（ユーザー操作前のAudioContext作成を防止）
 
 // ===== 音色生成ヘルパー =====
 
