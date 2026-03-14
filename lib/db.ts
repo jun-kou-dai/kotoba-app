@@ -185,7 +185,7 @@ export async function getDailyRecords(childId: string): Promise<DailyRecord[]> {
 
 // === Audio Cache (TTS音声の永続キャッシュ — 専用DB) ===
 const AUDIO_DB_NAME = 'KotobaAppAudio';
-const AUDIO_DB_VERSION = 1;
+const AUDIO_DB_VERSION = 2; // v2: TTSプロンプト変更に伴いキャッシュクリア
 const AUDIO_STORE = 'audioCache';
 
 let audioDB: IDBDatabase | null = null;
@@ -196,9 +196,11 @@ function openAudioDB(): Promise<IDBDatabase> {
     const req = indexedDB.open(AUDIO_DB_NAME, AUDIO_DB_VERSION);
     req.onupgradeneeded = (e) => {
       const database = (e.target as IDBOpenDBRequest).result;
-      if (!database.objectStoreNames.contains(AUDIO_STORE)) {
-        database.createObjectStore(AUDIO_STORE, { keyPath: 'key' });
+      // v2アップグレード: 旧キャッシュを削除して再作成（プロンプト変更のため）
+      if (database.objectStoreNames.contains(AUDIO_STORE)) {
+        database.deleteObjectStore(AUDIO_STORE);
       }
+      database.createObjectStore(AUDIO_STORE, { keyPath: 'key' });
     };
     req.onsuccess = (e) => { audioDB = (e.target as IDBOpenDBRequest).result; resolve(audioDB); };
     req.onerror = (e) => reject(e);
