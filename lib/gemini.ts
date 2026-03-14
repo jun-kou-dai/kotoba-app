@@ -76,7 +76,7 @@ export async function callGeminiTTS(text: string, apiKey: string, voiceName: str
   }
 
   const ttsBody = {
-    contents: [{ role: 'user', parts: [{ text: `幼児に語りかける優しいお姉さんの声で、ゆっくり はっきり読んでください：\n\n${text}` }] }],
+    contents: [{ role: 'user', parts: [{ text: `次の文章を読んでください：\n\n${text}` }] }],
     generationConfig: {
       responseModalities: ['AUDIO'],
       speechConfig: {
