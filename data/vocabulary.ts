@@ -39,14 +39,14 @@ export const vocabulary: VocabularyItem[] = [
 
   // === のりもの (10語) ===
   { id: 'kuruma',     themeId: 'norimono', word: 'くるま',         reading: 'くるま',         emoji: '🚗', hint: 'ぶーぶー',                   sortOrder: 1 },
-  { id: 'densha',     themeId: 'norimono', word: 'でんしゃ',       reading: 'でんしゃ',       emoji: '🚃', hint: 'がたんごとん',                 sortOrder: 2 },
+  { id: 'densha',     themeId: 'norimono', word: 'でんしゃ',       reading: 'でんしゃ',       ttsText: '電車', emoji: '🚃', hint: 'がたんごとん',                 sortOrder: 2 },
   { id: 'hikouki',    themeId: 'norimono', word: 'ひこうき',       reading: 'ひこうき',       emoji: '✈️', hint: 'そらを とぶ',                  sortOrder: 3 },
   { id: 'fune',       themeId: 'norimono', word: 'ふね',           reading: 'ふね',           emoji: '🚢', hint: 'うみを はしる',                sortOrder: 4 },
   { id: 'bus',        themeId: 'norimono', word: 'ばす',           reading: 'ばす',           ttsText: 'バス', emoji: '🚌', hint: 'たくさん のれる',              sortOrder: 5 },
-  { id: 'jitensha',   themeId: 'norimono', word: 'じてんしゃ',     reading: 'じてんしゃ',     emoji: '🚲', hint: 'ぺだるを こぐ',              sortOrder: 6 },
+  { id: 'jitensha',   themeId: 'norimono', word: 'じてんしゃ',     reading: 'じてんしゃ',     ttsText: '自転車', emoji: '🚲', hint: 'ぺだるを こぐ',              sortOrder: 6 },
   { id: 'shinkansen', themeId: 'norimono', word: 'しんかんせん',   reading: 'しんかんせん',   emoji: '🚅', hint: 'とっても はやい でんしゃ',     sortOrder: 7 },
-  { id: 'shoubousha', themeId: 'norimono', word: 'しょうぼうしゃ', reading: 'しょうぼうしゃ', emoji: '🚒', hint: 'あかい くるま ぴーぽー',       sortOrder: 8 },
-  { id: 'ambulance',  themeId: 'norimono', word: 'きゅうきゅうしゃ', reading: 'きゅうきゅうしゃ', emoji: '🚑', hint: 'びょういんに はこぶ',    sortOrder: 9 },
+  { id: 'shoubousha', themeId: 'norimono', word: 'しょうぼうしゃ', reading: 'しょうぼうしゃ', ttsText: '消防車', emoji: '🚒', hint: 'あかい くるま ぴーぽー',       sortOrder: 8 },
+  { id: 'ambulance',  themeId: 'norimono', word: 'きゅうきゅうしゃ', reading: 'きゅうきゅうしゃ', ttsText: '救急車', emoji: '🚑', hint: 'びょういんに はこぶ',    sortOrder: 9 },
   { id: 'rocket',     themeId: 'norimono', word: 'ろけっと',       reading: 'ろけっと',       ttsText: 'ロケット', emoji: '🚀', hint: 'うちゅうに いく',              sortOrder: 10 },
 ];
 
