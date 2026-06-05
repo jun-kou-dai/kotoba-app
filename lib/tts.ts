@@ -316,8 +316,8 @@ async function processPrecacheQueue(): Promise<void> {
       }
     }
 
-    // レート制限回避
-    await new Promise(r => setTimeout(r, 3_000));
+    // レート制限回避（1.5秒間隔: プリキャッシュ完了を高速化）
+    await new Promise(r => setTimeout(r, 1_500));
   }
   precacheWorkerRunning = false;
 }

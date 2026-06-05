@@ -125,7 +125,11 @@ export default function HistoryPage() {
                   <span className="text-sm text-gray-400 w-12">{date.getMonth() + 1}/{date.getDate()}</span>
                   <span className="text-lg">{theme?.emoji}</span>
                   <span className="font-bold flex-1">{MODE_LABELS[s.mode] || s.mode}</span>
-                  <span className="font-bold text-green-500">{s.correctCount}/{s.totalQuestions}</span>
+                  {s.mode === 'miru' ? (
+                    <span className="font-bold text-blue-400">みた</span>
+                  ) : (
+                    <span className="font-bold text-green-500">{s.correctCount}/{s.totalQuestions}</span>
+                  )}
                 </div>
               );
             })}

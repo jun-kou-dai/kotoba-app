@@ -2,8 +2,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '../../../../contexts/AppContext';
-import { getMasteryByChild } from '../../../../lib/db';
+import { getMasteryByChild, getSessionsByChild } from '../../../../lib/db';
 import { selectQuestions, processSessionResults } from '../../../../lib/learning-engine';
+import { countEarnedStickers } from '../../../../data/rewards';
 import { MasteryStatus, SessionAnswer } from '../../../../types/learning';
 import { ThemeId, LearningMode, VocabularyItem } from '../../../../types/vocabulary';
 import { getThemeById } from '../../../../data/themes';
@@ -59,6 +60,13 @@ export default function LearnClient({ themeId, mode }: { themeId: string; mode: 
       themeId,
       mode,
     });
+    // ごほうび: 今回のクリアで新しくシールが増えた時だけ、そのindexをURLで渡す（確定値・1回限り）
+    const sessions = await getSessionsByChild(currentChild.id);
+    const countAfter = countEarnedStickers(sessions);
+    const countBefore = countEarnedStickers(sessions.filter(s => s.id !== session.id));
+    if (countAfter > countBefore) {
+      params.set('earned', String(countAfter - 1));
+    }
     router.push(`/result?${params.toString()}`);
   }, [currentChild, themeId, learningMode, startedAt, router, mode]);
 

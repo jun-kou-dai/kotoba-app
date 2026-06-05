@@ -34,7 +34,7 @@ export default function MiruMode({ questions, onComplete }: MiruModeProps) {
     if (settings.voiceEnabled && current) {
       speakText(current.ttsText || current.word, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});
     }
-  }, [index, current, settings]);
+  }, [index, current, settings.voiceEnabled, settings.apiKey, settings.voiceName, settings.voiceSpeed]);
 
   const goNext = useCallback(() => {
     const answer: SessionAnswer = {

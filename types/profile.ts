@@ -18,3 +18,8 @@ export const AVATAR_OPTIONS = [
   { emoji: '🐼', label: 'ぱんだ' },
   { emoji: '🐧', label: 'ぺんぎん' },
 ] as const;
+
+/** 子どもの呼び方（性別で出し分け。男の子はくん、それ以外はちゃん） */
+export function childSuffix(gender: ChildProfile['gender']): string {
+  return gender === 'boy' ? 'くん' : 'ちゃん';
+}

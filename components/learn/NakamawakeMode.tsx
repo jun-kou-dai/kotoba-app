@@ -21,21 +21,16 @@ interface QuizState {
   correctIds: string[];
 }
 
-const OTHER_THEMES: ThemeId[] = ['doubutsu', 'tabemono', 'iro', 'norimono'];
-
-function makeQuiz(mainThemeId: ThemeId, questionIndex: number): QuizState {
-  // 偶数問は対象テーマ、奇数問は他テーマも出す
-  const targetThemeId = questionIndex % 3 === 0
-    ? OTHER_THEMES.filter(t => t !== mainThemeId)[questionIndex % 3] || mainThemeId
-    : mainThemeId;
-  const { choices, correctIds } = generateNakamawakeChoices(targetThemeId);
-  return { targetThemeId, choices, correctIds };
+function makeQuiz(mainThemeId: ThemeId): QuizState {
+  // 選んだテーマに固定して出題する（毎問「◯◯は どれ？」で一貫させる）
+  const { choices, correctIds } = generateNakamawakeChoices(mainThemeId);
+  return { targetThemeId: mainThemeId, choices, correctIds };
 }
 
 export default function NakamawakeMode({ themeId, questionCount, onComplete }: NakamawakeModeProps) {
   const { settings } = useApp();
   const [index, setIndex] = useState(0);
-  const [quiz, setQuiz] = useState<QuizState>(() => makeQuiz(themeId, 0));
+  const [quiz, setQuiz] = useState<QuizState>(() => makeQuiz(themeId));
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [answers, setAnswers] = useState<SessionAnswer[]>([]);
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null);
@@ -57,7 +52,7 @@ export default function NakamawakeMode({ themeId, questionCount, onComplete }: N
     if (settings.voiceEnabled && theme) {
       speakText(`${theme.name}は どれ？`, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});
     }
-  }, [index, theme, settings]);
+  }, [index, theme, settings.voiceEnabled, settings.apiKey, settings.voiceName, settings.voiceSpeed]);
 
   const toggleSelect = (id: string) => {
     if (feedback) return;
@@ -94,7 +89,7 @@ export default function NakamawakeMode({ themeId, questionCount, onComplete }: N
       onComplete([...answers]);
     } else {
       setIndex(nextIndex);
-      setQuiz(makeQuiz(themeId, nextIndex));
+      setQuiz(makeQuiz(themeId));
       setQuestionStartTime(Date.now());
     }
   }, [index, questionCount, answers, onComplete, themeId]);

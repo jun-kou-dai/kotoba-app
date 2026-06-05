@@ -1,9 +1,11 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { VocabularyItem } from '../../types/vocabulary';
 import { SessionAnswer } from '../../types/learning';
 import { generateDistractors } from '../../lib/learning-engine';
 import FeedbackOverlay from '../FeedbackOverlay';
+import { speakText } from '../../lib/tts';
+import { useApp } from '../../contexts/AppContext';
 
 interface ErabuModeProps {
   questions: VocabularyItem[];
@@ -22,11 +24,25 @@ function makeQuiz(target: VocabularyItem): QuizState {
 }
 
 export default function ErabuMode({ questions, onComplete }: ErabuModeProps) {
+  const { settings } = useApp();
   const [index, setIndex] = useState(0);
   const [quiz, setQuiz] = useState<QuizState>(() => makeQuiz(questions[0]));
   const [answers, setAnswers] = useState<SessionAnswer[]>([]);
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null);
   const [questionStartTime, setQuestionStartTime] = useState(Date.now());
+
+  // 出題時に「◯◯は どれ？」を読み上げ（字が読めない子向け）
+  useEffect(() => {
+    if (settings.voiceEnabled && quiz.target) {
+      speakText(`${quiz.target.ttsText || quiz.target.word}は どれ？`, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});
+    }
+  }, [index, quiz.target, settings.voiceEnabled, settings.apiKey, settings.voiceName, settings.voiceSpeed]);
+
+  const handleReplay = () => {
+    if (settings.voiceEnabled) {
+      speakText(`${quiz.target.ttsText || quiz.target.word}は どれ？`, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});
+    }
+  };
 
   const handleSelect = useCallback((selected: VocabularyItem) => {
     if (feedback) return;
@@ -79,6 +95,14 @@ export default function ErabuMode({ questions, onComplete }: ErabuModeProps) {
           </button>
         ))}
       </div>
+
+      {/* リプレイ */}
+      <button
+        onClick={handleReplay}
+        className="mt-6 bg-blue-100 rounded-full px-6 py-3 text-lg font-bold text-blue-700 active:scale-95 transition-transform"
+      >
+        🔊 もういちど きく
+      </button>
 
       {feedback && <FeedbackOverlay type={feedback} onDone={handleFeedbackDone} />}
     </div>

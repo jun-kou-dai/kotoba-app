@@ -8,6 +8,7 @@ import { themes } from '../../data/themes';
 import { vocabulary } from '../../data/vocabulary';
 import { ThemeId } from '../../types/vocabulary';
 import ThemeCard from '../../components/ThemeCard';
+import { childSuffix } from '../../types/profile';
 
 export default function HomePage() {
   const router = useRouter();
@@ -34,10 +35,10 @@ export default function HomePage() {
     return map;
   }, [masteries]);
 
-  // 日替わりことば
+  // 日替わりことば（経過日数で全語を循環。getDate()だと1〜31に偏り一部の語が出ないため）
   const todayWord = useMemo(() => {
-    const dayIndex = new Date().getDate() % vocabulary.length;
-    return vocabulary[dayIndex];
+    const epochDay = Math.floor(Date.now() / 86_400_000);
+    return vocabulary[epochDay % vocabulary.length];
   }, []);
 
   if (!currentChild) return null;
@@ -49,11 +50,12 @@ export default function HomePage() {
         <div className="flex items-center gap-3">
           <span className="text-4xl">{currentChild.avatarEmoji}</span>
           <div>
-            <div className="text-xl font-extrabold">{currentChild.name}ちゃん</div>
+            <div className="text-xl font-extrabold">{currentChild.name}{childSuffix(currentChild.gender)}</div>
             {streak > 0 && <div className="text-sm text-orange-500 font-bold">🔥 {streak}にち れんぞく！</div>}
           </div>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => router.push('/reward')} className="text-2xl p-2">🎁</button>
           <button onClick={() => router.push('/history')} className="text-2xl p-2">📊</button>
           <button onClick={() => router.push('/settings')} className="text-2xl p-2">⚙️</button>
         </div>

@@ -117,9 +117,9 @@ export async function callGeminiTTS(text: string, apiKey: string, voiceName: str
           quotaExhaustedCount++;
           break;
         }
-        // 一時的レート制限: 15秒リトライ1回だけ
+        // 一時的レート制限: 5秒リトライ1回だけ
         if (msg === 'API_429_RATE' && retry < 1) {
-          await new Promise(r => setTimeout(r, 15_000));
+          await new Promise(r => setTimeout(r, 5_000));
           continue;
         }
         break; // その他のエラー or リトライ上限 → 次のモデルへ

@@ -75,9 +75,11 @@ export async function processSessionResults(
   await saveSession(session);
   await recordDaily(childId);
 
-  // 各問題の習得度を更新
-  for (const answer of answers) {
-    await updateMastery(childId, answer.vocabId, answer.isCorrect);
+  // 各問題の習得度を更新（みるモードは「見るだけ」の学習なので習得度は変えない）
+  if (mode !== 'miru') {
+    for (const answer of answers) {
+      await updateMastery(childId, answer.vocabId, answer.isCorrect);
+    }
   }
 
   return session;
