@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useApp } from '../../../../contexts/AppContext';
 import { getMasteryByChild, getSessionsByChild } from '../../../../lib/db';
 import { selectQuestions, processSessionResults } from '../../../../lib/learning-engine';
+import { difficultyForAge } from '../../../../lib/difficulty';
 import { countEarnedStickers } from '../../../../data/rewards';
 import { MasteryStatus, SessionAnswer } from '../../../../types/learning';
 import { ThemeId, LearningMode, VocabularyItem } from '../../../../types/vocabulary';
@@ -32,12 +33,15 @@ export default function LearnClient({ themeId, mode }: { themeId: string; mode: 
 
   const theme = getThemeById(themeId);
   const learningMode = mode as LearningMode;
+  // 年齢から難易度を導出（選択肢数・なかまわけ枚数・問題数・出題レベル）
+  const difficulty = difficultyForAge(currentChild?.age ?? 4);
 
   useEffect(() => {
     if (isLoading) return;
     if (!currentChild) { router.replace('/'); return; }
+    const diff = difficultyForAge(currentChild.age);
     getMasteryByChild(currentChild.id).then((masteries: MasteryStatus[]) => {
-      const qs = selectQuestions(themeId as ThemeId, learningMode, masteries);
+      const qs = selectQuestions(themeId as ThemeId, learningMode, masteries, diff.maxLevel, diff.questionCount);
       setQuestions(qs);
       setIsReady(true);
     });
@@ -94,13 +98,13 @@ export default function LearnClient({ themeId, mode }: { themeId: string; mode: 
         <MiruMode questions={questions} onComplete={handleComplete} />
       )}
       {learningMode === 'kiku' && (
-        <KikuMode questions={questions} onComplete={handleComplete} />
+        <KikuMode questions={questions} onComplete={handleComplete} choices={difficulty.choices} maxLevel={difficulty.maxLevel} />
       )}
       {learningMode === 'erabu' && (
-        <ErabuMode questions={questions} onComplete={handleComplete} />
+        <ErabuMode questions={questions} onComplete={handleComplete} choices={difficulty.choices} maxLevel={difficulty.maxLevel} />
       )}
       {learningMode === 'nakamawake' && (
-        <NakamawakeMode themeId={themeId as ThemeId} questionCount={Math.min(questions.length, 10)} onComplete={handleComplete} />
+        <NakamawakeMode themeId={themeId as ThemeId} questionCount={difficulty.questionCount} correctCount={difficulty.nakamawakeCorrect} total={difficulty.nakamawakeTotal} maxLevel={difficulty.maxLevel} onComplete={handleComplete} />
       )}
     </div>
   );

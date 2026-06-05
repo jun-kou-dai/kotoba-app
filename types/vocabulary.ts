@@ -25,4 +25,6 @@ export interface VocabularyItem {
   imageUrl?: string;
   hint?: string;
   sortOrder: number;
+  /** 難易度レベル 1=やさしい(2歳〜) / 2=ふつう(3歳〜) / 3=むずかしい(5歳のみ) */
+  level: 1 | 2 | 3;
 }

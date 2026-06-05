@@ -10,6 +10,8 @@ import { useApp } from '../../contexts/AppContext';
 interface KikuModeProps {
   questions: VocabularyItem[];
   onComplete: (answers: SessionAnswer[]) => void;
+  choices: number;
+  maxLevel: number;
 }
 
 interface QuizState {
@@ -17,16 +19,16 @@ interface QuizState {
   choices: VocabularyItem[];
 }
 
-function makeQuiz(target: VocabularyItem): QuizState {
-  const distractors = generateDistractors(target, 3);
+function makeQuiz(target: VocabularyItem, choicesCount: number, maxLevel: number): QuizState {
+  const distractors = generateDistractors(target, choicesCount - 1, true, maxLevel);
   const choices = [...distractors, target].sort(() => Math.random() - 0.5);
   return { target, choices };
 }
 
-export default function KikuMode({ questions, onComplete }: KikuModeProps) {
+export default function KikuMode({ questions, onComplete, choices, maxLevel }: KikuModeProps) {
   const { settings } = useApp();
   const [index, setIndex] = useState(0);
-  const [quiz, setQuiz] = useState<QuizState>(() => makeQuiz(questions[0]));
+  const [quiz, setQuiz] = useState<QuizState>(() => makeQuiz(questions[0], choices, maxLevel));
   const [answers, setAnswers] = useState<SessionAnswer[]>([]);
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null);
   const [questionStartTime, setQuestionStartTime] = useState(Date.now());
@@ -71,16 +73,19 @@ export default function KikuMode({ questions, onComplete }: KikuModeProps) {
       onComplete([...answers]);
     } else {
       setIndex(nextIndex);
-      setQuiz(makeQuiz(questions[nextIndex]));
+      setQuiz(makeQuiz(questions[nextIndex], choices, maxLevel));
       setQuestionStartTime(Date.now());
     }
-  }, [index, questions, answers, onComplete]);
+  }, [index, questions, answers, onComplete, choices, maxLevel]);
 
   const handleReplay = () => {
     if (settings.voiceEnabled) {
       speakText(`${quiz.target.ttsText || quiz.target.word}は どれかな？`, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});
     }
   };
+
+  // 選択肢数でグリッド列を変える（2/4択=2列、3択=3列）
+  const gridCols = quiz.choices.length === 3 ? 'grid-cols-3' : 'grid-cols-2';
 
   return (
     <div className="flex flex-col items-center px-4 py-4">
@@ -89,8 +94,8 @@ export default function KikuMode({ questions, onComplete }: KikuModeProps) {
         <div className="text-2xl font-extrabold text-gray-600">🔊 なにかな？</div>
       </div>
 
-      {/* 4択 */}
-      <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
+      {/* 選択肢 */}
+      <div className={`grid ${gridCols} gap-4 w-full max-w-sm`}>
         {quiz.choices.map(item => (
           <button
             key={item.id}

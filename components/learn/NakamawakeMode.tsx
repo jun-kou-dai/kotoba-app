@@ -12,6 +12,9 @@ import { useApp } from '../../contexts/AppContext';
 interface NakamawakeModeProps {
   themeId: ThemeId;
   questionCount: number;
+  correctCount: number;
+  total: number;
+  maxLevel: number;
   onComplete: (answers: SessionAnswer[]) => void;
 }
 
@@ -21,16 +24,16 @@ interface QuizState {
   correctIds: string[];
 }
 
-function makeQuiz(mainThemeId: ThemeId): QuizState {
+function makeQuiz(mainThemeId: ThemeId, correctCount: number, total: number, maxLevel: number): QuizState {
   // 選んだテーマに固定して出題する（毎問「◯◯は どれ？」で一貫させる）
-  const { choices, correctIds } = generateNakamawakeChoices(mainThemeId);
+  const { choices, correctIds } = generateNakamawakeChoices(mainThemeId, correctCount, total - correctCount, maxLevel);
   return { targetThemeId: mainThemeId, choices, correctIds };
 }
 
-export default function NakamawakeMode({ themeId, questionCount, onComplete }: NakamawakeModeProps) {
+export default function NakamawakeMode({ themeId, questionCount, correctCount, total, maxLevel, onComplete }: NakamawakeModeProps) {
   const { settings } = useApp();
   const [index, setIndex] = useState(0);
-  const [quiz, setQuiz] = useState<QuizState>(() => makeQuiz(themeId));
+  const [quiz, setQuiz] = useState<QuizState>(() => makeQuiz(themeId, correctCount, total, maxLevel));
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [answers, setAnswers] = useState<SessionAnswer[]>([]);
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null);
@@ -89,10 +92,13 @@ export default function NakamawakeMode({ themeId, questionCount, onComplete }: N
       onComplete([...answers]);
     } else {
       setIndex(nextIndex);
-      setQuiz(makeQuiz(themeId));
+      setQuiz(makeQuiz(themeId, correctCount, total, maxLevel));
       setQuestionStartTime(Date.now());
     }
-  }, [index, questionCount, answers, onComplete, themeId]);
+  }, [index, questionCount, answers, onComplete, themeId, correctCount, total, maxLevel]);
+
+  // 枚数でグリッド列を変える（4枚=2列、6枚=3列）
+  const gridCols = quiz.choices.length <= 4 ? 'grid-cols-2' : 'grid-cols-3';
 
   return (
     <div className="flex flex-col items-center px-4 py-4">
@@ -102,8 +108,8 @@ export default function NakamawakeMode({ themeId, questionCount, onComplete }: N
         <div className="text-2xl font-extrabold">{theme.name}は どれ？</div>
       </div>
 
-      {/* 6択 */}
-      <div className="grid grid-cols-3 gap-3 w-full max-w-sm mb-6">
+      {/* 選択肢 */}
+      <div className={`grid ${gridCols} gap-3 w-full max-w-sm mb-6`}>
         {quiz.choices.map(item => {
           const isSelected = selectedIds.has(item.id);
           const showCorrect = feedback && quiz.correctIds.includes(item.id);
