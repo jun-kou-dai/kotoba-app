@@ -2,6 +2,10 @@
 // nano-storybook と同じアプローチ: Gemini優先、失敗時ブラウザTTSフォールバック
 import { callGeminiTTS, ttsResultToBlob, isTTSQuotaExhausted } from './gemini';
 import { getAudioCache, saveAudioCache } from './db';
+import { AUDIO_MANIFEST } from '../data/audioManifest';
+
+// 同梱音声(public/audio)のベースパス（GitHub Pages時のみ basePath が付く）
+const AUDIO_BASE = process.env.NEXT_PUBLIC_BASE_PATH || '';
 
 // 旧バージョンのlocalStorageフラグをクリーンアップ
 if (typeof window !== 'undefined') {
@@ -189,10 +193,28 @@ function playBrowserTTS(text: string, speed: number): Promise<void> {
   });
 }
 
+/** 同梱の事前生成音声(public/audio)を再生する。キー不要・即時・高品質。 */
+async function playBundledAudio(file: string, speed: number): Promise<void> {
+  const myId = ++speechCancelId;
+  if (currentAudioUrl) {
+    URL.revokeObjectURL(currentAudioUrl);
+    currentAudioUrl = null;
+  }
+  const audio = getOrCreateAudio();
+  audio.src = `${AUDIO_BASE}/audio/${file}`;
+  audio.playbackRate = speed;
+  isSpeakingNow = true;
+  return new Promise<void>((resolve, reject) => {
+    audio.onended = () => { if (speechCancelId === myId) isSpeakingNow = false; resolve(); };
+    audio.onerror = () => { if (speechCancelId === myId) isSpeakingNow = false; reject(new Error('bundled audio error')); };
+    audio.play().catch((e) => { isSpeakingNow = false; reject(e); });
+  });
+}
+
 /**
  * 音声を再生する（nano-storybookと同じアプローチ）
- * APIキーがあればGemini TTS（人間らしい声）を使用。
- * 失敗時のみブラウザTTSにフォールバック。
+ * 同梱音声があれば最優先。無ければ APIキーがあればGemini TTS、
+ * 最後にブラウザTTSにフォールバック。
  */
 export async function speakText(
   text: string,
@@ -208,6 +230,17 @@ export async function speakText(
   // 初回呼び出し時に日本語音声をロード（ページ読み込み時ではなくユーザー操作時）
   if (!voicesLoaded) preloadVoices();
   stopSpeaking();
+
+  // 同梱の事前生成音声を最優先（キー不要・即時・高品質）
+  const bundledFile = AUDIO_MANIFEST[text];
+  if (bundledFile) {
+    try {
+      await playBundledAudio(bundledFile, speed);
+      return;
+    } catch {
+      // 同梱再生に失敗したら通常フォールバックへ
+    }
+  }
 
   // Gemini TTS優先（nano-storybookと同じ）
   if (apiKey) {

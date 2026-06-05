@@ -65,11 +65,11 @@ export default function HomePage() {
       {settings.voiceEnabled && !settings.apiKey && (
         <button
           onClick={() => router.push('/settings')}
-          className="w-full bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 mb-4 text-left active:scale-[0.98] transition-transform"
+          className="w-full bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 mb-4 text-left active:scale-[0.98] transition-transform"
         >
-          <div className="text-lg font-extrabold text-amber-700">🔊 こえの せってい</div>
-          <div className="text-sm text-amber-600 mt-1">
-            きれいな こえで よむには Gemini API キーが ひつようです。タップして せっていしてね
+          <div className="text-lg font-extrabold text-emerald-700">🔊 こえは せってい ゼロで OK</div>
+          <div className="text-sm text-emerald-600 mt-1">
+            だいじな ことばは きれいな こえで よみあげます。こえを かえたい ひとは タップ（にんい）
           </div>
         </button>
       )}
