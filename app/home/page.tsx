@@ -9,6 +9,7 @@ import { vocabulary } from '../../data/vocabulary';
 import { ThemeId } from '../../types/vocabulary';
 import ThemeCard from '../../components/ThemeCard';
 import { childSuffix } from '../../types/profile';
+import { speakText } from '../../lib/tts';
 
 export default function HomePage() {
   const router = useRouter();
@@ -74,13 +75,21 @@ export default function HomePage() {
         </button>
       )}
 
-      {/* きょうのことば */}
-      <div className="bg-white rounded-2xl p-5 shadow-md mb-6 text-center">
+      {/* きょうのことば（タップで読み上げ） */}
+      <button
+        onClick={() => {
+          if (settings.voiceEnabled) {
+            speakText(todayWord.ttsText || todayWord.word, settings.apiKey || null, settings.voiceName, settings.voiceSpeed).catch(() => {});
+          }
+        }}
+        className="w-full bg-white rounded-2xl p-5 shadow-md mb-6 text-center active:scale-95 transition-transform"
+      >
         <div className="text-sm text-gray-400 font-bold mb-1">きょうの ことば</div>
         <div className="text-6xl mb-2">{todayWord.emoji}</div>
         <div className="text-3xl font-extrabold">{todayWord.word}</div>
         {todayWord.hint && <div className="text-gray-400 mt-1">{todayWord.hint}</div>}
-      </div>
+        <div className="text-blue-500 text-sm font-bold mt-3">🔊 タップして きく</div>
+      </button>
 
       {/* テーマ一覧 */}
       <div className="mb-4">
